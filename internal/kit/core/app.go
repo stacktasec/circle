@@ -12,7 +12,7 @@ import (
 	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
-	"github.com/stacktasec/circle/zlog"
+	"github.com/stacktasec/circle/internal/kit/zlog"
 	"io/fs"
 	"net/http"
 	"reflect"
