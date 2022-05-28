@@ -21,8 +21,8 @@ import (
 	"time"
 )
 
-const ServiceSuffix = "service"
-const RequestID = "RequestID"
+const serviceSuffix = "service"
+const keyRequestID = "X-Request-ID"
 
 const (
 	respTypeJson   = "json"
@@ -65,7 +65,7 @@ type versionGroup struct {
 	alphaServices  []any
 }
 
-func NewVersionGroup(mainVersion int) *versionGroup {
+func NewGroup(mainVersion int) *versionGroup {
 	if mainVersion < 1 {
 		panic("main version must larger than one")
 	}
@@ -76,34 +76,20 @@ func NewVersionGroup(mainVersion int) *versionGroup {
 }
 
 func (v *versionGroup) SetStable(services ...any) {
-	if len(services) == 0 {
-		panic("services must more than one")
-	}
-
 	v.stableServices = append(v.stableServices, services...)
 }
 
 func (v *versionGroup) SetBeta(services ...any) {
-	if len(services) == 0 {
-		panic("services must more than one")
-	}
-
 	v.betaServices = append(v.betaServices, services...)
 }
 
 func (v *versionGroup) SetAlpha(services ...any) {
-	if len(services) == 0 {
-		panic("services must more than one")
-	}
-
 	v.alphaServices = append(v.alphaServices, services...)
 }
 
-type app struct {
-	versionGroups map[int]*versionGroup
-	engine        *gin.Engine
-	baseURL       string
-	baseGroup     *gin.RouterGroup
+type options struct {
+	appName string
+	ctxFunc func() context.Context
 
 	addr string
 
@@ -112,75 +98,139 @@ type app struct {
 	cert       string
 	key        string
 
-	ctxTimeout time.Duration // default 30s
+	baseURL    string
+	ctxTimeout time.Duration
 
 	enableRateLimit bool
-	limitNum        int64
-	limitBucket     *ratelimit.Bucket
+	fillInterval    time.Duration
+	capacity        int64
+	quantum         int64
 
-	enableMonitor bool
-	loadNum       float64
+	enableOverloadClose bool
+	maxCpuPercent       float64
+	maxMemPercent       float64
+}
+
+func (o *options) ensure() {
+	if o.addr == "" {
+		o.addr = ":8080"
+	}
+
+	if o.ctxTimeout == 0 {
+		o.ctxTimeout = time.Second * 30
+	}
+}
+
+type AppOption interface {
+	apply(*options)
+}
+
+// jsOptFn configures an option for the JetStreamContext.
+type appOptionFunc func(opts *options)
+
+func (opt appOptionFunc) apply(opts *options) {
+	opt(opts)
+}
+
+func WithAppName(name string) AppOption {
+	return appOptionFunc(func(opts *options) {
+		opts.appName = name
+	})
+}
+
+func WithCtxFunc(f func() context.Context) AppOption {
+	return appOptionFunc(func(opts *options) {
+		opts.ctxFunc = f
+	})
+}
+
+func WithAddr(addr string) AppOption {
+	return appOptionFunc(func(opts *options) {
+		opts.addr = addr
+	})
+}
+
+func WithTLS(cert, key string) AppOption {
+	return appOptionFunc(func(opts *options) {
+		opts.enableTLS = true
+		opts.cert = cert
+		opts.key = key
+	})
+}
+
+func WithQUIC(cert, key string) AppOption {
+	return appOptionFunc(func(opts *options) {
+		opts.enableQUIC = true
+		opts.cert = cert
+		opts.key = key
+	})
+}
+
+func WithBaseURL(url string) AppOption {
+	return appOptionFunc(func(opts *options) {
+		opts.baseURL = url
+	})
+}
+
+func WithCtxTimeout(d time.Duration) AppOption {
+	return appOptionFunc(func(opts *options) {
+		opts.ctxTimeout = d
+	})
+}
+
+func WithRateLimit(fillInterval time.Duration, capacity, quantum int) AppOption {
+	return appOptionFunc(func(opts *options) {
+		opts.enableRateLimit = true
+		opts.fillInterval = fillInterval
+		opts.capacity = int64(capacity)
+		opts.quantum = int64(quantum)
+	})
+}
+
+func WithOverloadClose(maxCpu, maxMem float64) AppOption {
+	return appOptionFunc(func(opts *options) {
+		opts.enableOverloadClose = true
+		opts.maxCpuPercent = maxCpu
+		opts.maxMemPercent = maxMem
+	})
+}
+
+type app struct {
+	options       options
+	versionGroups map[int]*versionGroup
+	engine        *gin.Engine
+	baseGroup     *gin.RouterGroup
+	limitBucket   *ratelimit.Bucket
 	loadValue     atomic.Value
 }
 
-func NewApp() *app {
-	return &app{versionGroups: make(map[int]*versionGroup), ctxTimeout: time.Second * 30, addr: ":8080"}
-}
+func NewApp(opts ...AppOption) *app {
+	o := &options{}
 
-func (a *app) SetAddr(addr string) {
-	a.addr = addr
-}
-
-func (a *app) SetTLS(cert, key string) {
-	a.enableTLS = true
-	a.cert = cert
-	a.key = key
-}
-
-func (a *app) SetQUIC(cert, key string) {
-	a.enableQUIC = true
-	a.cert = cert
-	a.key = key
-}
-
-func (a *app) SetBaseURL(url string) {
-	a.baseURL = url
-}
-
-func (a *app) SetGroup(g *versionGroup) {
-	if g == nil {
-		panic("version group must be non-nil")
+	for _, opt := range opts {
+		opt.apply(o)
 	}
 
-	_, ok := a.versionGroups[g.mainVersion]
-	if ok {
-		panic("duplicated main version")
+	o.ensure()
+
+	return &app{options: *o, versionGroups: make(map[int]*versionGroup)}
+}
+
+func (a *app) Map(groups ...*versionGroup) {
+	for _, g := range groups {
+		_, ok := a.versionGroups[g.mainVersion]
+		if ok {
+			panic("duplicated main version")
+		}
+		a.versionGroups[g.mainVersion] = g
 	}
-	a.versionGroups[g.mainVersion] = g
 }
 
-func (a *app) SetCtxTimeout(d time.Duration) {
-	a.ctxTimeout = d
-}
-
-func (a *app) SetMonitor(num float64) {
-	a.enableMonitor = true
-	a.loadNum = num
-}
-
-func (a *app) EnableRateLimit(num int) {
-	a.enableRateLimit = true
-	a.limitNum = int64(num)
-}
-
-func (a *app) Build() {
-	if len(a.versionGroups) == 0 {
-		panic("must call set group")
-	}
+func (a *app) build() {
 
 	r := gin.Default()
 
-	if a.enableMonitor {
+	if a.options.enableOverloadClose {
 		r.Use(func(c *gin.Context) {
 			value := a.loadValue.Load()
 			if value == true {
@@ -191,8 +241,8 @@ func (a *app) Build() {
 		})
 	}
 
-	if a.enableRateLimit {
-		a.limitBucket = ratelimit.NewBucketWithQuantum(time.Millisecond, a.limitNum, 1)
+	if a.options.enableRateLimit {
+		a.limitBucket = ratelimit.NewBucketWithQuantum(a.options.fillInterval, a.options.capacity, a.options.quantum)
 		r.Use(func(c *gin.Context) {
 			count := a.limitBucket.TakeAvailable(1)
 			if count == 0 {
@@ -209,7 +259,9 @@ func (a *app) Build() {
 
 	r.Use(cors.Default())
 
-	baseGroup := r.Group(a.baseURL)
+	defaultRoute(r, a.options.appName)
+
+	baseGroup := r.Group(a.options.baseURL)
 	a.baseGroup = baseGroup
 
 	for _, g := range a.versionGroups {
@@ -221,17 +273,26 @@ func (a *app) Build() {
 	a.engine = r
 }
 
-func (a *app) Run() {
-	if a.engine == nil {
-		panic("must call build")
-	}
+func defaultRoute(r *gin.Engine, appName string) {
+	r.GET("/", func(c *gin.Context) {
+		welcomeMsg := "Welcome"
+		if appName != "" {
+			welcomeMsg = fmt.Sprintf("%s to %s", welcomeMsg, appName)
+		}
 
-	if a.enableMonitor {
-		a.monitor()
+		c.String(http.StatusOK, welcomeMsg)
+	})
+}
+
+func (a *app) Run() {
+	a.build()
+
+	if a.options.enableOverloadClose {
+		a.watch()
 	}
 
 	httpServer := http.Server{
-		Addr:           a.addr,
+		Addr:           a.options.addr,
 		Handler:        a.engine,
 		ReadTimeout:    time.Second * 10,
 		WriteTimeout:   time.Second * 10,
@@ -241,27 +302,27 @@ func (a *app) Run() {
 		Server: &httpServer,
 	}
 
-	if a.enableQUIC {
-		zlog.Infof("run http3 server listen on %s", a.addr)
-		if err := http3Server.ListenAndServeTLS(a.addr, a.cert); err != nil {
+	if a.options.enableQUIC {
+		zlog.Infof("http3 server is listening on %s", a.options.addr)
+		if err := http3Server.ListenAndServeTLS(a.options.addr, a.options.cert); err != nil {
 			panic(err)
 		}
 	}
 
-	if a.enableTLS {
-		zlog.Infof("run https server listen on %s", a.addr)
-		if err := httpServer.ListenAndServeTLS(a.cert, a.key); err != nil {
+	if a.options.enableTLS {
+		zlog.Infof("https server is listening on %s", a.options.addr)
+		if err := httpServer.ListenAndServeTLS(a.options.cert, a.options.key); err != nil {
 			panic(err)
 		}
 	}
 
-	zlog.Infof("run http server listen on %s", a.addr)
+	zlog.Infof("http server is listening on %s", a.options.addr)
 	if err := httpServer.ListenAndServe(); err != nil {
 		panic(err)
 	}
 }
 
-func (a *app) monitor() {
+func (a *app) watch() {
 
 	go func() {
 		defer func() {
@@ -274,9 +335,9 @@ func (a *app) monitor() {
 		defer ticker.Stop()
 
 		for t := range ticker.C {
-			cpuPercents, err := cpu.Percent(time.Second, true)
+			cpuPercents, err := cpu.Percent(time.Second*5, true)
 			if err != nil || len(cpuPercents) == 0 {
-				zlog.Errorf("monitor cpu percent error %s,%s", t, err)
+				zlog.Errorf("watch cpu percent error %s,%s", t, err)
 				a.loadValue.Store(false)
 				continue
 			}
@@ -285,18 +346,18 @@ func (a *app) monitor() {
 			for _, u := range cpuPercents {
 				sum += u
 			}
-			if sum/float64(len(cpuPercents)) > 80 {
+			if sum/float64(len(cpuPercents)) > a.options.maxCpuPercent {
 				a.loadValue.Store(true)
 				continue
 			}
 
 			stat, err := mem.VirtualMemory()
 			if err != nil {
-				zlog.Errorf("monitor mem usage error %s,%s", t, err)
+				zlog.Errorf("watch mem usage error %s,%s", t, err)
 				a.loadValue.Store(false)
 				continue
 			}
-			if stat.UsedPercent > 80 {
+			if stat.UsedPercent > a.options.maxMemPercent {
 				a.loadValue.Store(true)
 				continue
 			}
@@ -354,15 +415,21 @@ func (a *app) fillActions(g *gin.RouterGroup, service any) {
 				return
 			}
 
-			ctx := context.Background()
+			var ctx context.Context
+			if a.options.ctxFunc != nil {
+				ctx = a.options.ctxFunc()
+			} else {
+				ctx = context.Background()
+			}
 
 			reqID := uuid.NewString()
-			ctx = context.WithValue(ctx, RequestID, reqID)
-			ctx, _ = context.WithTimeout(ctx, a.ctxTimeout)
+			ctx = context.WithValue(ctx, keyRequestID, reqID)
+			timeoutCtx, cancel := context.WithTimeout(ctx, a.options.ctxTimeout)
+			defer cancel()
 
-			c.Writer.Header().Set("X-Request-ID", reqID)
+			c.Writer.Header().Set(keyRequestID, reqID)
 
-			ctxValue := reflect.ValueOf(ctx)
+			ctxValue := reflect.ValueOf(timeoutCtx)
 			reqValue := reflect.ValueOf(req).Elem()
 			rtnList := action.methodData.Call([]reflect.Value{ctxValue, reqValue})
 
@@ -416,10 +483,10 @@ func makeActions(service any) []reflectAction {
 	}
 
 	rawTypeName := strings.ToLower(rawType.Name())
-	if !strings.HasSuffix(rawTypeName, ServiceSuffix) {
+	if !strings.HasSuffix(rawTypeName, serviceSuffix) {
 		panic("struct must have suffix [Service]")
 	}
-	serviceName := strings.ReplaceAll(rawTypeName, ServiceSuffix, "")
+	serviceName := strings.ReplaceAll(rawTypeName, serviceSuffix, "")
 
 	serviceValue := reflect.New(reflect.TypeOf(service))
 	serviceType := serviceValue.Type()
