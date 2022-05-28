@@ -8,11 +8,16 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/iancoleman/strcase"
+	"github.com/juju/ratelimit"
 	"github.com/lucas-clemente/quic-go/http3"
+	"github.com/shirou/gopsutil/v3/cpu"
+	"github.com/shirou/gopsutil/v3/mem"
+	"github.com/stacktasec/circle/zlog"
 	"io/fs"
 	"net/http"
 	"reflect"
 	"strings"
+	"sync/atomic"
 	"time"
 )
 
@@ -95,32 +100,51 @@ func (v *versionGroup) SetAlpha(services ...any) {
 }
 
 type app struct {
-	engine    *gin.Engine
-	baseGroup *gin.RouterGroup
-	groups    map[int]*versionGroup
+	versionGroups map[int]*versionGroup
+	engine        *gin.Engine
+	baseURL       string
+	baseGroup     *gin.RouterGroup
 
 	addr string
-	cert string
-	key  string
 
-	baseURL string
-
-	ctxTimeout time.Duration
-	rateLimit  int
+	enableTLS  bool
 	enableQUIC bool
+	cert       string
+	key        string
+
+	ctxTimeout time.Duration // default 30s
+
+	enableRateLimit bool
+	limitNum        int64
+	limitBucket     *ratelimit.Bucket
+
+	enableMonitor bool
+	loadNum       float64
+	loadValue     atomic.Value
 }
 
 func NewApp() *app {
-	return &app{groups: make(map[int]*versionGroup), ctxTimeout: time.Second * 30, addr: ":8080"}
+	return &app{versionGroups: make(map[int]*versionGroup), ctxTimeout: time.Second * 30, addr: ":8080"}
 }
 
 func (a *app) SetAddr(addr string) {
 	a.addr = addr
 }
 
-func (a *app) SetCertAndKey(cert, key string) {
+func (a *app) SetTLS(cert, key string) {
+	a.enableTLS = true
 	a.cert = cert
 	a.key = key
+}
+
+func (a *app) SetQUIC(cert, key string) {
+	a.enableQUIC = true
+	a.cert = cert
+	a.key = key
+}
+
+func (a *app) SetBaseURL(url string) {
+	a.baseURL = url
 }
 
 func (a *app) SetGroup(g *versionGroup) {
@@ -128,38 +152,59 @@ func (a *app) SetGroup(g *versionGroup) {
 		panic("version group must be non-nil")
 	}
 
-	_, ok := a.groups[g.mainVersion]
+	_, ok := a.versionGroups[g.mainVersion]
 	if ok {
 		panic("duplicated main version")
 	}
-	a.groups[g.mainVersion] = g
+	a.versionGroups[g.mainVersion] = g
 }
 
 func (a *app) SetCtxTimeout(d time.Duration) {
 	a.ctxTimeout = d
 }
 
-func (a *app) SetBaseURL(url string) {
-	a.baseURL = url
+func (a *app) SetMonitor(num float64) {
+	a.enableMonitor = true
+	a.loadNum = num
 }
 
-func (a *app) SetQUIC() {
-	a.enableQUIC = true
-}
-
-func (a *app) SetRateLimit(n int) {
-	a.rateLimit = n
+func (a *app) EnableRateLimit(num int) {
+	a.enableRateLimit = true
+	a.limitNum = int64(num)
 }
 
 func (a *app) Build() {
-	if len(a.groups) == 0 {
+	if len(a.versionGroups) == 0 {
 		panic("must call set group")
 	}
 
 	r := gin.Default()
 
+	if a.enableMonitor {
+		r.Use(func(c *gin.Context) {
+			value := a.loadValue.Load()
+			if value == true {
+				c.AbortWithStatus(http.StatusServiceUnavailable)
+				return
+			}
+			c.Next()
+		})
+	}
+
+	if a.enableRateLimit {
+		a.limitBucket = ratelimit.NewBucketWithQuantum(time.Millisecond, a.limitNum, 1)
+		r.Use(func(c *gin.Context) {
+			count := a.limitBucket.TakeAvailable(1)
+			if count == 0 {
+				c.AbortWithStatus(http.StatusTooManyRequests)
+				return
+			}
+			c.Next()
+		})
+	}
+
 	r.NoRoute(func(c *gin.Context) {
-		c.Status(http.StatusNotImplemented)
+		c.AbortWithStatus(http.StatusNotImplemented)
 	})
 
 	r.Use(cors.Default())
@@ -167,7 +212,7 @@ func (a *app) Build() {
 	baseGroup := r.Group(a.baseURL)
 	a.baseGroup = baseGroup
 
-	for _, g := range a.groups {
+	for _, g := range a.versionGroups {
 		a.fillGroups(*g)
 	}
 
@@ -181,6 +226,10 @@ func (a *app) Run() {
 		panic("must call build")
 	}
 
+	if a.enableMonitor {
+		a.monitor()
+	}
+
 	httpServer := http.Server{
 		Addr:           a.addr,
 		Handler:        a.engine,
@@ -192,21 +241,67 @@ func (a *app) Run() {
 		Server: &httpServer,
 	}
 
-	if a.cert == "" || a.key == "" {
-		if err := httpServer.ListenAndServe(); err != nil {
+	if a.enableQUIC {
+		zlog.Infof("run http3 server listen on %s", a.addr)
+		if err := http3Server.ListenAndServeTLS(a.addr, a.cert); err != nil {
 			panic(err)
 		}
 	}
 
-	if a.enableQUIC {
-		if err := http3Server.ListenAndServeTLS(a.addr, a.cert); err != nil {
-			panic(err)
-		}
-	} else {
+	if a.enableTLS {
+		zlog.Infof("run https server listen on %s", a.addr)
 		if err := httpServer.ListenAndServeTLS(a.cert, a.key); err != nil {
 			panic(err)
 		}
 	}
+
+	zlog.Infof("run http server listen on %s", a.addr)
+	if err := httpServer.ListenAndServe(); err != nil {
+		panic(err)
+	}
+}
+
+func (a *app) monitor() {
+
+	go func() {
+		defer func() {
+			if r := recover(); r != nil {
+				zlog.Panicf(r)
+			}
+		}()
+
+		ticker := time.NewTicker(time.Minute)
+		defer ticker.Stop()
+
+		for t := range ticker.C {
+			cpuPercents, err := cpu.Percent(time.Second, true)
+			if err != nil || len(cpuPercents) == 0 {
+				zlog.Errorf("monitor cpu percent error %s,%s", t, err)
+				a.loadValue.Store(false)
+				continue
+			}
+
+			var sum float64
+			for _, u := range cpuPercents {
+				sum += u
+			}
+			if sum/float64(len(cpuPercents)) > 80 {
+				a.loadValue.Store(true)
+				continue
+			}
+
+			stat, err := mem.VirtualMemory()
+			if err != nil {
+				zlog.Errorf("monitor mem usage error %s,%s", t, err)
+				a.loadValue.Store(false)
+				continue
+			}
+			if stat.UsedPercent > 80 {
+				a.loadValue.Store(true)
+				continue
+			}
+		}
+	}()
 }
 
 type reflectAction struct {
@@ -249,13 +344,13 @@ func (a *app) fillActions(g *gin.RouterGroup, service any) {
 		g.POST(fmt.Sprintf("/%s/%s", action.serviceName, action.methodName), func(c *gin.Context) {
 			req := action.bindData
 			if err := c.ShouldBind(&req); err != nil {
-				c.Status(http.StatusBadRequest)
+				c.AbortWithStatus(http.StatusBadRequest)
 				return
 			}
 
 			i := req.(Request)
 			if err := i.Validate(); err != nil {
-				c.Status(http.StatusBadRequest)
+				c.AbortWithStatus(http.StatusBadRequest)
 				return
 			}
 
@@ -276,16 +371,16 @@ func (a *app) fillActions(g *gin.RouterGroup, service any) {
 			errValue := rtnList[1].Interface()
 			if errValue != nil {
 				if errValue == context.DeadlineExceeded {
-					c.Status(http.StatusGatewayTimeout)
+					c.AbortWithStatus(http.StatusGatewayTimeout)
 					return
 				}
 
 				err, ok := errValue.(knownError)
 				if ok {
-					c.JSON(http.StatusConflict, gin.H{"error": err})
+					c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err})
 					return
 				} else {
-					c.Status(http.StatusInternalServerError)
+					c.AbortWithStatus(http.StatusInternalServerError)
 					return
 				}
 			}
@@ -294,7 +389,7 @@ func (a *app) fillActions(g *gin.RouterGroup, service any) {
 				file := result.Interface().(fs.File)
 				stat, err := file.Stat()
 				if err != nil {
-					c.Status(http.StatusInternalServerError)
+					c.AbortWithStatus(http.StatusInternalServerError)
 					return
 				}
 
