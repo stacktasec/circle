@@ -3,6 +3,8 @@ module github.com/stacktasec/circle
 go 1.18
 
 require (
+	github.com/gin-contrib/cors v1.3.1
+	github.com/gin-contrib/gzip v0.0.5
 	github.com/gin-gonic/gin v1.7.7
 	github.com/google/uuid v1.3.0
 	github.com/iancoleman/strcase v0.2.0

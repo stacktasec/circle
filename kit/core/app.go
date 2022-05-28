@@ -3,6 +3,8 @@ package core
 import (
 	"context"
 	"fmt"
+	"github.com/gin-contrib/cors"
+	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/iancoleman/strcase"
@@ -11,6 +13,15 @@ import (
 	"net/http"
 	"reflect"
 	"strings"
+	"time"
+)
+
+const ServiceSuffix = "service"
+const RequestID = "RequestID"
+
+const (
+	respTypeJson   = "json"
+	respTypeStream = "stream"
 )
 
 type Request interface {
@@ -83,24 +94,24 @@ func (v *versionGroup) SetAlpha(services ...any) {
 	v.alphaServices = append(v.alphaServices, services...)
 }
 
-const (
-	respTypeJson   = "json"
-	respTypeStream = "stream"
-)
-
 type app struct {
-	engine *gin.Engine
-	groups map[int]*versionGroup
+	engine    *gin.Engine
+	baseGroup *gin.RouterGroup
+	groups    map[int]*versionGroup
 
 	addr string
 	cert string
 	key  string
 
+	baseURL string
+
+	ctxTimeout time.Duration
+	rateLimit  int
 	enableQUIC bool
 }
 
 func NewApp() *app {
-	return &app{groups: make(map[int]*versionGroup)}
+	return &app{groups: make(map[int]*versionGroup), ctxTimeout: time.Second * 30, addr: ":8080"}
 }
 
 func (a *app) SetAddr(addr string) {
@@ -124,8 +135,20 @@ func (a *app) SetGroup(g *versionGroup) {
 	a.groups[g.mainVersion] = g
 }
 
+func (a *app) SetCtxTimeout(d time.Duration) {
+	a.ctxTimeout = d
+}
+
+func (a *app) SetBaseURL(url string) {
+	a.baseURL = url
+}
+
 func (a *app) SetQUIC() {
 	a.enableQUIC = true
+}
+
+func (a *app) SetRateLimit(n int) {
+	a.rateLimit = n
 }
 
 func (a *app) Build() {
@@ -135,9 +158,20 @@ func (a *app) Build() {
 
 	r := gin.Default()
 
+	r.NoRoute(func(c *gin.Context) {
+		c.Status(http.StatusNotImplemented)
+	})
+
+	r.Use(cors.Default())
+
+	baseGroup := r.Group(a.baseURL)
+	a.baseGroup = baseGroup
+
 	for _, g := range a.groups {
-		fillGroups(r, *g)
+		a.fillGroups(*g)
 	}
+
+	r.Use(gzip.Gzip(gzip.DefaultCompression))
 
 	a.engine = r
 }
@@ -147,18 +181,29 @@ func (a *app) Run() {
 		panic("must call build")
 	}
 
+	httpServer := http.Server{
+		Addr:           a.addr,
+		Handler:        a.engine,
+		ReadTimeout:    time.Second * 10,
+		WriteTimeout:   time.Second * 10,
+		MaxHeaderBytes: 1 << 16,
+	}
+	http3Server := http3.Server{
+		Server: &httpServer,
+	}
+
 	if a.cert == "" || a.key == "" {
-		if err := http.ListenAndServe(a.addr, a.engine); err != nil {
+		if err := httpServer.ListenAndServe(); err != nil {
 			panic(err)
 		}
 	}
 
 	if a.enableQUIC {
-		if err := http3.ListenAndServeQUIC(a.addr, a.cert, a.key, a.engine); err != nil {
+		if err := http3Server.ListenAndServeTLS(a.addr, a.cert); err != nil {
 			panic(err)
 		}
 	} else {
-		if err := http.ListenAndServeTLS(a.addr, a.cert, a.key, a.engine); err != nil {
+		if err := httpServer.ListenAndServeTLS(a.cert, a.key); err != nil {
 			panic(err)
 		}
 	}
@@ -177,25 +222,25 @@ type reflectAction struct {
 	respType string
 }
 
-func fillGroups(r *gin.Engine, vg versionGroup) {
+func (a *app) fillGroups(vg versionGroup) {
 
 	for _, item := range vg.stableServices {
-		g := r.Group(fmt.Sprintf("/v%d", vg.mainVersion))
-		fillActions(g, item)
+		g := a.baseGroup.Group(fmt.Sprintf("/v%d", vg.mainVersion))
+		a.fillActions(g, item)
 	}
 
 	for _, item := range vg.betaServices {
-		g := r.Group(fmt.Sprintf("/v%dbeta", vg.mainVersion))
-		fillActions(g, item)
+		g := a.baseGroup.Group(fmt.Sprintf("/v%dbeta", vg.mainVersion))
+		a.fillActions(g, item)
 	}
 
 	for _, item := range vg.alphaServices {
-		g := r.Group(fmt.Sprintf("/v%dalpha", vg.mainVersion))
-		fillActions(g, item)
+		g := a.baseGroup.Group(fmt.Sprintf("/v%dalpha", vg.mainVersion))
+		a.fillActions(g, item)
 	}
 }
 
-func fillActions(g *gin.RouterGroup, service any) {
+func (a *app) fillActions(g *gin.RouterGroup, service any) {
 
 	actions := makeActions(service)
 
@@ -217,11 +262,12 @@ func fillActions(g *gin.RouterGroup, service any) {
 			ctx := context.Background()
 
 			reqID := uuid.NewString()
-			ctx = context.WithValue(ctx, "RequestID", reqID)
+			ctx = context.WithValue(ctx, RequestID, reqID)
+			ctx, _ = context.WithTimeout(ctx, a.ctxTimeout)
+
 			c.Writer.Header().Set("X-Request-ID", reqID)
 
 			ctxValue := reflect.ValueOf(ctx)
-
 			reqValue := reflect.ValueOf(req).Elem()
 			rtnList := action.methodData.Call([]reflect.Value{ctxValue, reqValue})
 
@@ -229,6 +275,10 @@ func fillActions(g *gin.RouterGroup, service any) {
 			// 还是原生error
 			errValue := rtnList[1].Interface()
 			if errValue != nil {
+				if errValue == context.DeadlineExceeded {
+					c.Status(http.StatusGatewayTimeout)
+					return
+				}
 
 				err, ok := errValue.(knownError)
 				if ok {
@@ -257,7 +307,7 @@ func fillActions(g *gin.RouterGroup, service any) {
 				c.Status(http.StatusNotFound)
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"data": value})
+			c.JSON(http.StatusOK, gin.H{"result": value})
 		})
 	}
 }
@@ -270,12 +320,11 @@ func makeActions(service any) []reflectAction {
 		panic("service should be struct")
 	}
 
-	const mustSuffix = "service"
 	rawTypeName := strings.ToLower(rawType.Name())
-	if !strings.HasSuffix(rawTypeName, mustSuffix) {
+	if !strings.HasSuffix(rawTypeName, ServiceSuffix) {
 		panic("struct must have suffix [Service]")
 	}
-	serviceName := strings.ReplaceAll(rawTypeName, mustSuffix, "")
+	serviceName := strings.ReplaceAll(rawTypeName, ServiceSuffix, "")
 
 	serviceValue := reflect.New(reflect.TypeOf(service))
 	serviceType := serviceValue.Type()
@@ -289,7 +338,13 @@ func makeActions(service any) []reflectAction {
 	for i := 0; i < numMethods; i++ {
 		// 获得方法
 		methodType := serviceType.Method(i)
-		methodValue := serviceValue.Method(i)
+
+		// 必须满足 导出 有 2个入参 2个出参
+		// 入参是context.Context Request 则认定为待映射方法
+		// 此时 出参 必须是 结构体指针 和 error
+		if !methodType.IsExported() {
+			continue
+		}
 
 		// 检查参数是否符合规定格式
 		inParams := methodType.Type.NumIn()
@@ -297,8 +352,6 @@ func makeActions(service any) []reflectAction {
 		if inParams != 3 || outParams != 2 {
 			continue
 		}
-
-		var respType string
 
 		// 必须满足 如下 四元组
 		in1 := methodType.Type.In(1)
@@ -314,16 +367,11 @@ func makeActions(service any) []reflectAction {
 			continue
 		}
 
-		if ok, r := satisfyResponse(out0); !ok {
-			continue
-		} else {
-			respType = r
-		}
+		respType := mustResponse(out0)
 
-		if ok := satisfyError(out1); !ok {
-			continue
-		}
+		mustError(out1)
 
+		methodValue := serviceValue.Method(i)
 		action := reflectAction{
 			serviceName: strcase.ToSnake(serviceName),
 			methodName:  strcase.ToSnake(methodType.Name),
@@ -351,16 +399,23 @@ func satisfyRequest(t reflect.Type) bool {
 	return pti.Implements(reqType)
 }
 
-func satisfyResponse(t reflect.Type) (bool, string) {
+func mustResponse(t reflect.Type) string {
+	if t.Kind() != reflect.Pointer || t.Elem().Kind() != reflect.Struct {
+		panic("this position type must be a pointer of struct")
+	}
+
 	// 指针类型 直接用
 	streamType := reflect.TypeOf((*fs.File)(nil)).Elem()
 	if t.Implements(streamType) {
-		return true, respTypeStream
+		return respTypeStream
 	}
-	return true, respTypeJson
+
+	return respTypeJson
 }
 
-func satisfyError(t reflect.Type) bool {
+func mustError(t reflect.Type) {
 	errType := reflect.TypeOf((*error)(nil)).Elem()
-	return t.Implements(errType)
+	if !t.Implements(errType) {
+		panic("this position type must be error")
+	}
 }
