@@ -253,6 +253,8 @@ func (a *app) fillActions(g *gin.RouterGroup, service Service) {
 	for _, action := range actions {
 
 		g.POST(fmt.Sprintf("/%s/%s", action.serviceName, action.methodName), func(c *gin.Context) {
+			a.handleHeaders(c)
+
 			req := action.bindData
 			if err := c.ShouldBind(&req); err != nil {
 				c.AbortWithStatus(http.StatusBadRequest)
@@ -316,5 +318,19 @@ func (a *app) fillActions(g *gin.RouterGroup, service Service) {
 			}
 			c.JSON(http.StatusOK, gin.H{"result": result})
 		})
+	}
+}
+
+func (a *app) handleHeaders(c *gin.Context) {
+	if len(a.options.headerInterceptors) == 0 {
+		return
+	}
+
+	for _, interceptor := range a.options.headerInterceptors {
+		code := interceptor(c.Request.Header)
+		if code != http.StatusOK {
+			c.AbortWithStatus(code)
+			return
+		}
 	}
 }

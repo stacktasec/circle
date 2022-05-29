@@ -1,6 +1,7 @@
 package core
 
 import (
+	"net/http"
 	"time"
 )
 
@@ -16,6 +17,8 @@ type options struct {
 
 	baseURL    string
 	ctxTimeout time.Duration
+
+	headerInterceptors []func(h http.Header) int
 
 	enableRateLimit bool
 	fillInterval    time.Duration
@@ -84,6 +87,12 @@ func WithBaseURL(url string) AppOption {
 func WithCtxTimeout(d time.Duration) AppOption {
 	return appOptionFunc(func(opts *options) {
 		opts.ctxTimeout = d
+	})
+}
+
+func WithHeaderFunc(list ...func(h http.Header) int) AppOption {
+	return appOptionFunc(func(opts *options) {
+		opts.headerInterceptors = list
 	})
 }
 
