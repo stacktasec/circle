@@ -80,7 +80,7 @@ func (a *app) build() {
 
 	r := gin.Default()
 
-	if a.options.enableOverloadClose {
+	if a.options.enableOverloadBreak {
 		r.Use(func(c *gin.Context) {
 			value := a.loadValue.Load()
 			if value == true {
@@ -137,7 +137,7 @@ func (a *app) customDiscovery(r *gin.Engine) {
 func (a *app) Run() {
 	a.build()
 
-	if a.options.enableOverloadClose {
+	if a.options.enableOverloadBreak {
 		a.watch()
 	}
 

@@ -24,7 +24,7 @@ type options struct {
 	capacity        int64
 	quantum         int64
 
-	enableOverloadClose bool
+	enableOverloadBreak bool
 	maxCpuPercent       float64
 	maxMemPercent       float64
 }
@@ -105,9 +105,9 @@ func WithRateLimit(fillInterval time.Duration, capacity, quantum int) AppOption 
 	})
 }
 
-func WithOverloadClose(maxCpu, maxMem float64) AppOption {
+func WithOverloadBreak(maxCpu, maxMem float64) AppOption {
 	return appOptionFunc(func(opts *options) {
-		opts.enableOverloadClose = true
+		opts.enableOverloadBreak = true
 		opts.maxCpuPercent = maxCpu
 		opts.maxMemPercent = maxMem
 	})
