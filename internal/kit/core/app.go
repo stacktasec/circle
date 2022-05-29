@@ -58,7 +58,7 @@ func NewApp(opts ...AppOption) *app {
 	return instance
 }
 
-func (a *app) MapServices(groups ...*versionGroup) {
+func (a *app) Map(groups ...*versionGroup) {
 	for _, g := range groups {
 		_, ok := a.versionGroups[g.mainVersion]
 		if ok {
@@ -68,7 +68,7 @@ func (a *app) MapServices(groups ...*versionGroup) {
 	}
 }
 
-func (a *app) InjectDependencies(fs ...any) {
+func (a *app) Construct(fs ...any) {
 	for _, item := range fs {
 		if err := a.container.Provide(item); err != nil {
 			panic(err)
@@ -230,25 +230,25 @@ type reflectAction struct {
 
 func (a *app) fillGroups(vg versionGroup) {
 
-	for _, item := range vg.stableServices {
+	for _, service := range vg.stableServices {
 		g := a.baseGroup.Group(fmt.Sprintf("/v%d", vg.mainVersion))
-		a.fillActions(g, item)
+		a.fillActions(g, service)
 	}
 
-	for _, item := range vg.betaServices {
+	for _, service := range vg.betaServices {
 		g := a.baseGroup.Group(fmt.Sprintf("/v%dbeta", vg.mainVersion))
-		a.fillActions(g, item)
+		a.fillActions(g, service)
 	}
 
-	for _, item := range vg.alphaServices {
+	for _, service := range vg.alphaServices {
 		g := a.baseGroup.Group(fmt.Sprintf("/v%dalpha", vg.mainVersion))
-		a.fillActions(g, item)
+		a.fillActions(g, service)
 	}
 }
 
-func (a *app) fillActions(g *gin.RouterGroup, impl any) {
+func (a *app) fillActions(g *gin.RouterGroup, service Service) {
 
-	actions := a.makeActions(impl)
+	actions := a.makeActions(service)
 
 	for _, action := range actions {
 

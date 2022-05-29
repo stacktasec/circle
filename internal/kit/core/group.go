@@ -2,9 +2,9 @@ package core
 
 type versionGroup struct {
 	mainVersion    int
-	stableServices []any
-	betaServices   []any
-	alphaServices  []any
+	stableServices []Service
+	betaServices   []Service
+	alphaServices  []Service
 }
 
 func NewGroup(mainVersion int) *versionGroup {
@@ -17,14 +17,14 @@ func NewGroup(mainVersion int) *versionGroup {
 	}
 }
 
-func (v *versionGroup) SetStable(services ...any) {
+func (v *versionGroup) SetStable(services ...Service) {
 	v.stableServices = append(v.stableServices, services...)
 }
 
-func (v *versionGroup) SetBeta(services ...any) {
+func (v *versionGroup) SetBeta(services ...Service) {
 	v.betaServices = append(v.betaServices, services...)
 }
 
-func (v *versionGroup) SetAlpha(services ...any) {
+func (v *versionGroup) SetAlpha(services ...Service) {
 	v.alphaServices = append(v.alphaServices, services...)
 }
