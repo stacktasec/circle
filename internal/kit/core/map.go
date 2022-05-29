@@ -9,8 +9,7 @@ import (
 )
 
 const (
-	methodInit    = "Init"
-	suffixService = "Service"
+	methodInit = "Init"
 )
 
 // 获取该结构体里的所有receiver method
@@ -25,9 +24,6 @@ func (a *app) makeActions(service any) []reflectAction {
 	pointerType := pointerValue.Type()
 
 	typeName := structType.Name()
-	if !strings.HasSuffix(typeName, suffixService) {
-		panic("service must have suffix [Service]")
-	}
 
 	initValue := pointerValue.MethodByName(methodInit)
 	if !initValue.IsValid() {
