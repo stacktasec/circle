@@ -11,7 +11,7 @@ import (
 const serviceSuffix = "Service"
 
 // 获取该结构体里的所有receiver method
-func makeActions(impl any) []reflectAction {
+func (a *app) makeActions(impl any) []reflectAction {
 
 	rawType := reflect.TypeOf(impl)
 	if rawType.Kind() != reflect.Struct {
@@ -30,6 +30,12 @@ func makeActions(impl any) []reflectAction {
 	serviceType := reflect.TypeOf((*Service)(nil)).Elem()
 	if !implType.Implements(serviceType) {
 		panic("service type must implement interface Service")
+	}
+
+	implData := implValue.Interface()
+	svc := implData.(Service)
+	if err := svc.Resolve(a.container); err != nil {
+		panic(err)
 	}
 
 	numMethods := implType.NumMethod()

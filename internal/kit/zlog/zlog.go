@@ -39,9 +39,6 @@ func init() {
 	InitLogger()
 }
 
-// InitLogger 应该在应用的main.go里首先调用，并且进程退出时调用SyncLogger()
-// 默认ReleaseMode=false
-// ReleaseMode=false下，就算有传入也不会打印appName,instanceName
 func InitLogger(options ...Option) {
 	defaultOptions = &Options{}
 

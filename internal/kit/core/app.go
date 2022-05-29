@@ -12,12 +12,16 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/stacktasec/circle/internal/kit/zlog"
+	"go.uber.org/dig"
 	"io/fs"
 	"net/http"
 	"reflect"
+	"sync"
 	"sync/atomic"
 	"time"
 )
+
+var once sync.Once
 
 const keyRequestID = "X-Request-ID"
 
@@ -26,115 +30,8 @@ const (
 	respTypeStream = "stream"
 )
 
-type options struct {
-	appName string
-	ctxFunc func() context.Context
-
-	addr string
-
-	enableTLS  bool
-	enableQUIC bool
-	cert       string
-	key        string
-
-	baseURL    string
-	ctxTimeout time.Duration
-
-	enableRateLimit bool
-	fillInterval    time.Duration
-	capacity        int64
-	quantum         int64
-
-	enableOverloadClose bool
-	maxCpuPercent       float64
-	maxMemPercent       float64
-}
-
-func (o *options) ensure() {
-	if o.addr == "" {
-		o.addr = ":8080"
-	}
-
-	if o.ctxTimeout == 0 {
-		o.ctxTimeout = time.Second * 30
-	}
-}
-
-type AppOption interface {
-	apply(*options)
-}
-
-// jsOptFn configures an option for the JetStreamContext.
-type appOptionFunc func(opts *options)
-
-func (opt appOptionFunc) apply(opts *options) {
-	opt(opts)
-}
-
-func WithAppName(name string) AppOption {
-	return appOptionFunc(func(opts *options) {
-		opts.appName = name
-	})
-}
-
-func WithCtxFunc(f func() context.Context) AppOption {
-	return appOptionFunc(func(opts *options) {
-		opts.ctxFunc = f
-	})
-}
-
-func WithAddr(addr string) AppOption {
-	return appOptionFunc(func(opts *options) {
-		opts.addr = addr
-	})
-}
-
-func WithTLS(cert, key string) AppOption {
-	return appOptionFunc(func(opts *options) {
-		opts.enableTLS = true
-		opts.cert = cert
-		opts.key = key
-	})
-}
-
-func WithQUIC(cert, key string) AppOption {
-	return appOptionFunc(func(opts *options) {
-		opts.enableQUIC = true
-		opts.cert = cert
-		opts.key = key
-	})
-}
-
-func WithBaseURL(url string) AppOption {
-	return appOptionFunc(func(opts *options) {
-		opts.baseURL = url
-	})
-}
-
-func WithCtxTimeout(d time.Duration) AppOption {
-	return appOptionFunc(func(opts *options) {
-		opts.ctxTimeout = d
-	})
-}
-
-func WithRateLimit(fillInterval time.Duration, capacity, quantum int) AppOption {
-	return appOptionFunc(func(opts *options) {
-		opts.enableRateLimit = true
-		opts.fillInterval = fillInterval
-		opts.capacity = int64(capacity)
-		opts.quantum = int64(quantum)
-	})
-}
-
-func WithOverloadClose(maxCpu, maxMem float64) AppOption {
-	return appOptionFunc(func(opts *options) {
-		opts.enableOverloadClose = true
-		opts.maxCpuPercent = maxCpu
-		opts.maxMemPercent = maxMem
-	})
-}
-
 type app struct {
+	container     *dig.Container
 	options       options
 	versionGroups map[int]*versionGroup
 	engine        *gin.Engine
@@ -143,25 +40,39 @@ type app struct {
 	loadValue     atomic.Value
 }
 
+// NewApp 每个进程最多调用一次
 func NewApp(opts ...AppOption) *app {
-	o := &options{}
 
-	for _, opt := range opts {
-		opt.apply(o)
-	}
+	var instance *app
+	once.Do(func() {
+		o := &options{}
 
-	o.ensure()
+		for _, opt := range opts {
+			opt.apply(o)
+		}
 
-	return &app{options: *o, versionGroups: make(map[int]*versionGroup)}
+		o.ensure()
+		instance = &app{container: dig.New(), options: *o, versionGroups: make(map[int]*versionGroup)}
+	})
+
+	return instance
 }
 
-func (a *app) Map(groups ...*versionGroup) {
+func (a *app) MapServices(groups ...*versionGroup) {
 	for _, g := range groups {
 		_, ok := a.versionGroups[g.mainVersion]
 		if ok {
 			panic("duplicated main version")
 		}
 		a.versionGroups[g.mainVersion] = g
+	}
+}
+
+func (a *app) InjectDependencies(fs ...any) {
+	for _, item := range fs {
+		if err := a.container.Provide(item); err != nil {
+			panic(err)
+		}
 	}
 }
 
@@ -198,7 +109,7 @@ func (a *app) build() {
 
 	r.Use(cors.Default())
 
-	defaultRoute(r, a.options.appName)
+	a.customDiscovery(r)
 
 	baseGroup := r.Group(a.options.baseURL)
 	a.baseGroup = baseGroup
@@ -212,11 +123,11 @@ func (a *app) build() {
 	a.engine = r
 }
 
-func defaultRoute(r *gin.Engine, appName string) {
+func (a *app) customDiscovery(r *gin.Engine) {
 	r.GET("/", func(c *gin.Context) {
 		welcomeMsg := "Welcome"
-		if appName != "" {
-			welcomeMsg = fmt.Sprintf("%s to %s", welcomeMsg, appName)
+		if a.options.appID != "" {
+			welcomeMsg = fmt.Sprintf("%s to %s", welcomeMsg, a.options.appID)
 		}
 
 		c.String(http.StatusOK, welcomeMsg)
@@ -337,7 +248,7 @@ func (a *app) fillGroups(vg versionGroup) {
 
 func (a *app) fillActions(g *gin.RouterGroup, impl any) {
 
-	actions := makeActions(impl)
+	actions := a.makeActions(impl)
 
 	for _, action := range actions {
 
@@ -390,7 +301,7 @@ func (a *app) fillActions(g *gin.RouterGroup, impl any) {
 					return
 				}
 			}
-			
+
 			result := rtnList[0].Interface()
 			if action.respType == respTypeStream {
 				file := result.(fs.File)
