@@ -1,9 +1,7 @@
 package zlog
 
 import (
-	"context"
 	"fmt"
-
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
@@ -17,34 +15,70 @@ const (
 	levelFatal = "fatal"
 )
 
-type Options struct {
-	CtxFunc func(context.Context)
+type options struct {
+	level string
 }
 
-type Option func(*Options)
-
-var (
-	zapLogger      *zap.Logger
-	defaultOptions *Options
-)
-
-func WithCtxFunc(f func(context.Context)) Option {
-	return func(options *Options) {
-		options.CtxFunc = f
+func (o *options) ensure() {
+	switch o.level {
+	case levelDebug, levelInfo, levelWarn, levelError, levelPanic, levelFatal:
+	default:
+		o.level = levelDebug
 	}
 }
 
-// 快捷使用
+func convert(level string) zapcore.Level {
+	switch level {
+	case "debug":
+		return zapcore.DebugLevel
+	case "info":
+		return zapcore.InfoLevel
+	case "warn":
+		return zapcore.WarnLevel
+	case "error":
+		return zapcore.ErrorLevel
+	case "panic":
+		return zapcore.PanicLevel
+	case "fatal":
+		return zapcore.FatalLevel
+	default:
+		panic("can not convert")
+	}
+}
+
+type LogOption interface {
+	apply(*options)
+}
+
+type logOptionFunc func(opts *options)
+
+func (opt logOptionFunc) apply(opts *options) {
+	opt(opts)
+}
+
+func WithLevel(level string) LogOption {
+	return logOptionFunc(func(opts *options) {
+		opts.level = level
+	})
+}
+
+var (
+	zapLogger  *zap.Logger
+	logOptions *options
+)
+
 func init() {
 	InitLogger()
 }
 
-func InitLogger(options ...Option) {
-	defaultOptions = &Options{}
+func InitLogger(opts ...LogOption) {
+	logOptions = &options{}
 
-	for _, opt := range options {
-		opt(defaultOptions)
+	for _, opt := range opts {
+		opt.apply(logOptions)
 	}
+
+	logOptions.ensure()
 
 	encoderConfig := zapcore.EncoderConfig{
 		TimeKey:      "time",
@@ -61,7 +95,7 @@ func InitLogger(options ...Option) {
 		EncoderConfig:    encoderConfig,
 		OutputPaths:      []string{"stdout"},
 		ErrorOutputPaths: []string{"stderr"},
-		Level:            zap.NewAtomicLevelAt(zapcore.DebugLevel),
+		Level:            zap.NewAtomicLevelAt(convert(logOptions.level)),
 	}
 
 	logger, _ := config.Build()
@@ -101,52 +135,4 @@ func Panicf(format any, a ...any) {
 func Fatalf(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
 	zapLogger.Fatal(msg)
-}
-
-func Debugc(ctx context.Context, format any, a ...any) {
-	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
-	zapLogger.Debug(msg)
-	if defaultOptions.CtxFunc != nil {
-		defaultOptions.CtxFunc(ctx)
-	}
-}
-
-func Infoc(ctx context.Context, format any, a ...any) {
-	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
-	zapLogger.Info(msg)
-	if defaultOptions.CtxFunc != nil {
-		defaultOptions.CtxFunc(ctx)
-	}
-}
-
-func Warnc(ctx context.Context, format any, a ...any) {
-	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
-	zapLogger.Warn(msg)
-	if defaultOptions.CtxFunc != nil {
-		defaultOptions.CtxFunc(ctx)
-	}
-}
-
-func Errorc(ctx context.Context, format any, a ...any) {
-	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
-	zapLogger.Error(msg)
-	if defaultOptions.CtxFunc != nil {
-		defaultOptions.CtxFunc(ctx)
-	}
-}
-
-func Panicc(ctx context.Context, format any, a ...any) {
-	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
-	zapLogger.Panic(msg)
-	if defaultOptions.CtxFunc != nil {
-		defaultOptions.CtxFunc(ctx)
-	}
-}
-
-func Fatalc(ctx context.Context, format any, a ...any) {
-	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
-	zapLogger.Fatal(msg)
-	if defaultOptions.CtxFunc != nil {
-		defaultOptions.CtxFunc(ctx)
-	}
 }

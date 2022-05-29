@@ -1,13 +1,11 @@
 package core
 
 import (
-	"context"
 	"time"
 )
 
 type options struct {
-	appID   string
-	ctxFunc func() context.Context
+	appID string
 
 	addr string
 
@@ -43,7 +41,6 @@ type AppOption interface {
 	apply(*options)
 }
 
-// jsOptFn configures an option for the JetStreamContext.
 type appOptionFunc func(opts *options)
 
 func (opt appOptionFunc) apply(opts *options) {
@@ -53,12 +50,6 @@ func (opt appOptionFunc) apply(opts *options) {
 func WithAppID(appID string) AppOption {
 	return appOptionFunc(func(opts *options) {
 		opts.appID = appID
-	})
-}
-
-func WithCtxFunc(f func() context.Context) AppOption {
-	return appOptionFunc(func(opts *options) {
-		opts.ctxFunc = f
 	})
 }
 

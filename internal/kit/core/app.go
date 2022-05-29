@@ -265,12 +265,7 @@ func (a *app) fillActions(g *gin.RouterGroup, service Service) {
 				return
 			}
 
-			var ctx context.Context
-			if a.options.ctxFunc != nil {
-				ctx = a.options.ctxFunc()
-			} else {
-				ctx = context.Background()
-			}
+			ctx := context.Background()
 
 			reqID := uuid.NewString()
 			ctx = context.WithValue(ctx, keyRequestID, reqID)
