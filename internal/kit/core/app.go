@@ -153,20 +153,20 @@ func (a *app) Run() {
 	}
 
 	if a.options.enableQUIC {
-		zlog.Infof("http3 server is listening on %s", a.options.addr)
+		zlog.Info("http3 server is listening on %s", a.options.addr)
 		if err := http3Server.ListenAndServeTLS(a.options.addr, a.options.cert); err != nil {
 			panic(err)
 		}
 	}
 
 	if a.options.enableTLS {
-		zlog.Infof("https server is listening on %s", a.options.addr)
+		zlog.Info("https server is listening on %s", a.options.addr)
 		if err := httpServer.ListenAndServeTLS(a.options.cert, a.options.key); err != nil {
 			panic(err)
 		}
 	}
 
-	zlog.Infof("http server is listening on %s", a.options.addr)
+	zlog.Info("http server is listening on %s", a.options.addr)
 	if err := httpServer.ListenAndServe(); err != nil {
 		panic(err)
 	}
@@ -177,7 +177,7 @@ func (a *app) watch() {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				zlog.Panicf(r)
+				zlog.Panic(r)
 			}
 		}()
 
@@ -187,7 +187,7 @@ func (a *app) watch() {
 		for t := range ticker.C {
 			cpuPercents, err := cpu.Percent(time.Second*5, true)
 			if err != nil || len(cpuPercents) == 0 {
-				zlog.Errorf("watch cpu percent error %s,%s", t, err)
+				zlog.Error("watch cpu percent error %s,%s", t, err)
 				a.loadValue.Store(false)
 				continue
 			}
@@ -203,7 +203,7 @@ func (a *app) watch() {
 
 			stat, err := mem.VirtualMemory()
 			if err != nil {
-				zlog.Errorf("watch mem usage error %s,%s", t, err)
+				zlog.Error("watch mem usage error %s,%s", t, err)
 				a.loadValue.Store(false)
 				continue
 			}

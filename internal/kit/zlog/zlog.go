@@ -107,32 +107,32 @@ func SyncLogger() error {
 	return zapLogger.Sync()
 }
 
-func Debugf(format any, a ...any) {
+func Debug(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
 	zapLogger.Debug(msg)
 }
 
-func Infof(format any, a ...any) {
+func Info(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
 	zapLogger.Info(msg)
 }
 
-func Warnf(format any, a ...any) {
+func Warn(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
 	zapLogger.Warn(msg)
 }
 
-func Errorf(format any, a ...any) {
+func Error(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
 	zapLogger.Error(msg)
 }
 
-func Panicf(format any, a ...any) {
+func Panic(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
 	zapLogger.Panic(msg)
 }
 
-func Fatalf(format any, a ...any) {
+func Fatal(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
 	zapLogger.Fatal(msg)
 }
