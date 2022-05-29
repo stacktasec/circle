@@ -68,8 +68,8 @@ func (a *app) Map(groups ...*versionGroup) {
 	}
 }
 
-func (a *app) Construct(fs ...any) {
-	for _, item := range fs {
+func (a *app) Construct(constructors ...any) {
+	for _, item := range constructors {
 		if err := a.container.Provide(item); err != nil {
 			panic(err)
 		}
