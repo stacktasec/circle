@@ -115,7 +115,7 @@ func (a *app) build() {
 	a.baseGroup = baseGroup
 
 	for _, g := range a.versionGroups {
-		a.fillGroups(*g)
+		a.fillGroups(g)
 	}
 
 	r.Use(gzip.Gzip(gzip.DefaultCompression))
@@ -228,7 +228,7 @@ type reflectAction struct {
 	respType string
 }
 
-func (a *app) fillGroups(vg versionGroup) {
+func (a *app) fillGroups(vg *versionGroup) {
 
 	for _, service := range vg.stableServices {
 		g := a.baseGroup.Group(fmt.Sprintf("/v%d", vg.mainVersion))

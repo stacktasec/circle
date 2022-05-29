@@ -3,7 +3,7 @@ package core
 import "fmt"
 
 type Service interface {
-	Resolve() any
+	Require() any
 }
 
 type Request interface {

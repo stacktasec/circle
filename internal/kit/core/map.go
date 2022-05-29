@@ -28,8 +28,8 @@ func (a *app) makeActions(service Service) []reflectAction {
 	implValue := reflect.New(structType)
 	implData := implValue.Interface()
 	svc := implData.(Service)
-	proposal := svc.Resolve()
-	if err := a.container.Invoke(proposal); err != nil {
+	requirement := svc.Require()
+	if err := a.container.Invoke(requirement); err != nil {
 		panic(err)
 	}
 
