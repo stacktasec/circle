@@ -246,7 +246,7 @@ func (a *app) fillGroups(vg *versionGroup) {
 	}
 }
 
-func (a *app) fillActions(g *gin.RouterGroup, service Service) {
+func (a *app) fillActions(g *gin.RouterGroup, service any) {
 
 	actions := a.makeActions(service)
 

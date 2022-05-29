@@ -2,10 +2,6 @@ package core
 
 import "fmt"
 
-type Service interface {
-	Require() any
-}
-
 type Request interface {
 	Validate() error
 }

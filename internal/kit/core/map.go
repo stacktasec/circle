@@ -8,28 +8,33 @@ import (
 	"strings"
 )
 
-const serviceSuffix = "Service"
+const (
+	methodInit    = "Init"
+	suffixService = "Service"
+)
 
 // 获取该结构体里的所有receiver method
-func (a *app) makeActions(service Service) []reflectAction {
+func (a *app) makeActions(service any) []reflectAction {
 
-	pointerType := reflect.TypeOf(service)
-	structType := pointerType.Elem()
-	if pointerType.Kind() != reflect.Pointer || structType.Kind() != reflect.Struct {
-		panic("service should be pointer of struct")
+	structType := reflect.TypeOf(service)
+	if structType.Kind() != reflect.Struct {
+		panic("service must be struct")
 	}
+
+	pointerValue := reflect.New(structType)
+	pointerType := pointerValue.Type()
 
 	typeName := structType.Name()
-	if !strings.HasSuffix(typeName, serviceSuffix) {
-		panic("struct must have suffix [Service]")
+	if !strings.HasSuffix(typeName, suffixService) {
+		panic("service must have suffix [Service]")
 	}
-	implName := strings.ReplaceAll(typeName, serviceSuffix, "")
 
-	implValue := reflect.New(structType)
-	implData := implValue.Interface()
-	svc := implData.(Service)
-	requirement := svc.Require()
-	if err := a.container.Invoke(requirement); err != nil {
+	initValue := pointerValue.MethodByName(methodInit)
+	if !initValue.IsValid() {
+		panic("service must have method Init")
+	}
+	initValueData := initValue.Interface()
+	if err := a.container.Invoke(initValueData); err != nil {
 		panic(err)
 	}
 
@@ -71,11 +76,12 @@ func (a *app) makeActions(service Service) []reflectAction {
 
 		mustError(out1)
 
+		serviceName := strings.ReplaceAll(typeName, suffixService, "")
 		action := reflectAction{
-			serviceName: strcase.ToSnake(implName),
+			serviceName: strcase.ToSnake(serviceName),
 			methodName:  strcase.ToSnake(method.Name),
 			bindData:    reflect.New(in2).Interface(),
-			methodData:  implValue.Method(i),
+			methodData:  pointerValue.Method(i),
 			respType:    respType,
 		}
 
