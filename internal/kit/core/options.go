@@ -18,7 +18,8 @@ type options struct {
 	baseURL    string
 	ctxTimeout time.Duration
 
-	headerInterceptors []func(h http.Header) int
+	idInterceptor   func(h http.Header) error
+	permInterceptor func(h http.Header) error
 
 	enableRateLimit bool
 	fillInterval    time.Duration
@@ -90,9 +91,15 @@ func WithCtxTimeout(d time.Duration) AppOption {
 	})
 }
 
-func WithHeaderFunc(list ...func(h http.Header) int) AppOption {
+func WithIDInterceptor(i func(h http.Header) error) AppOption {
 	return appOptionFunc(func(opts *options) {
-		opts.headerInterceptors = list
+		opts.idInterceptor = i
+	})
+}
+
+func WithPermInterceptor(p func(h http.Header) error) AppOption {
+	return appOptionFunc(func(opts *options) {
+		opts.permInterceptor = p
 	})
 }
 

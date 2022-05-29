@@ -253,7 +253,9 @@ func (a *app) fillActions(g *gin.RouterGroup, service Service) {
 	for _, action := range actions {
 
 		g.POST(fmt.Sprintf("/%s/%s", action.serviceName, action.methodName), func(c *gin.Context) {
-			a.handleHeaders(c)
+			if ok := a.handleHeader(c); !ok {
+				return
+			}
 
 			req := action.bindData
 			if err := c.ShouldBind(&req); err != nil {
@@ -321,16 +323,23 @@ func (a *app) fillActions(g *gin.RouterGroup, service Service) {
 	}
 }
 
-func (a *app) handleHeaders(c *gin.Context) {
-	if len(a.options.headerInterceptors) == 0 {
-		return
-	}
+func (a *app) handleHeader(c *gin.Context) bool {
+	h := c.Request.Header
 
-	for _, interceptor := range a.options.headerInterceptors {
-		code := interceptor(c.Request.Header)
-		if code != http.StatusOK {
-			c.AbortWithStatus(code)
-			return
+	if a.options.idInterceptor != nil {
+		if err := a.options.idInterceptor(h); err != nil {
+			c.AbortWithStatus(http.StatusUnauthorized)
+			return false
+		}
+
+		// 隐含：必须有身份 才有权限
+		if a.options.permInterceptor != nil {
+			if err := a.options.permInterceptor(h); err != nil {
+				c.AbortWithStatus(http.StatusForbidden)
+				return false
+			}
 		}
 	}
+
+	return true
 }
