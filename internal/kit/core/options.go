@@ -18,6 +18,8 @@ type options struct {
 	baseURL    string
 	ctxTimeout time.Duration
 
+	suffixes []string
+
 	idInterceptor   func(h http.Header) error
 	permInterceptor func(h http.Header) error
 
@@ -38,6 +40,10 @@ func (o *options) ensure() {
 
 	if o.ctxTimeout == 0 {
 		o.ctxTimeout = time.Second * 30
+	}
+
+	if len(o.suffixes) == 0 {
+		o.suffixes = []string{"service", "handler", "usecase", "controller"}
 	}
 }
 
@@ -88,6 +94,12 @@ func WithBaseURL(url string) AppOption {
 func WithCtxTimeout(d time.Duration) AppOption {
 	return appOptionFunc(func(opts *options) {
 		opts.ctxTimeout = d
+	})
+}
+
+func WithSuffixes(suffixes []string) AppOption {
+	return appOptionFunc(func(opts *options) {
+		opts.suffixes = suffixes
 	})
 }
 

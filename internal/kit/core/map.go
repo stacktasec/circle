@@ -76,10 +76,10 @@ func (a *app) makeActions(service any) []reflectAction {
 
 		mustError(out1)
 
-		serviceName := strings.ReplaceAll(typeName, suffixService, "")
+		svcName, methodName := a.makeName(typeName, method.Name)
 		action := reflectAction{
-			serviceName: strcase.ToSnake(serviceName),
-			methodName:  strcase.ToSnake(method.Name),
+			serviceName: svcName,
+			methodName:  methodName,
 			bindData:    reflect.New(in2).Interface(),
 			methodData:  pointerValue.Method(i),
 			respType:    respType,
@@ -89,6 +89,19 @@ func (a *app) makeActions(service any) []reflectAction {
 	}
 
 	return actions
+}
+
+func (a *app) makeName(resource, action string) (string, string) {
+	lr := strings.ToLower(resource)
+
+	for _, s := range a.options.suffixes {
+		if strings.HasSuffix(lr, s) {
+			lr = strings.ReplaceAll(lr, s, "")
+			break
+		}
+	}
+
+	return strcase.ToSnake(lr), strcase.ToSnake(action)
 }
 
 func satisfyContext(t reflect.Type) bool {
