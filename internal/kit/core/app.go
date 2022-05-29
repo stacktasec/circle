@@ -7,7 +7,6 @@ import (
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/iancoleman/strcase"
 	"github.com/juju/ratelimit"
 	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/shirou/gopsutil/v3/cpu"
@@ -16,76 +15,16 @@ import (
 	"io/fs"
 	"net/http"
 	"reflect"
-	"strings"
 	"sync/atomic"
 	"time"
 )
 
-const serviceSuffix = "service"
 const keyRequestID = "X-Request-ID"
 
 const (
 	respTypeJson   = "json"
 	respTypeStream = "stream"
 )
-
-type Request interface {
-	Validate() error
-}
-
-type knownError struct {
-	Status  string `json:"status"`
-	Message string `json:"message"`
-}
-
-func (k knownError) Error() string {
-	return fmt.Sprintf("[Status] %s [Message] %s", k.Status, k.Message)
-}
-
-func (k knownError) Is(err error) bool {
-	nErr, ok := err.(knownError)
-	if !ok {
-		return false
-	}
-
-	return k.Status == nErr.Status && k.Message == nErr.Message
-}
-
-func MakeKnownError(status, message string) error {
-	return knownError{
-		Status:  status,
-		Message: message,
-	}
-}
-
-type versionGroup struct {
-	mainVersion    int
-	stableServices []any
-	betaServices   []any
-	alphaServices  []any
-}
-
-func NewGroup(mainVersion int) *versionGroup {
-	if mainVersion < 1 {
-		panic("main version must larger than one")
-	}
-
-	return &versionGroup{
-		mainVersion: mainVersion,
-	}
-}
-
-func (v *versionGroup) SetStable(services ...any) {
-	v.stableServices = append(v.stableServices, services...)
-}
-
-func (v *versionGroup) SetBeta(services ...any) {
-	v.betaServices = append(v.betaServices, services...)
-}
-
-func (v *versionGroup) SetAlpha(services ...any) {
-	v.alphaServices = append(v.alphaServices, services...)
-}
 
 type options struct {
 	appName string
@@ -396,9 +335,9 @@ func (a *app) fillGroups(vg versionGroup) {
 	}
 }
 
-func (a *app) fillActions(g *gin.RouterGroup, service any) {
+func (a *app) fillActions(g *gin.RouterGroup, impl any) {
 
-	actions := makeActions(service)
+	actions := makeActions(impl)
 
 	for _, action := range actions {
 
@@ -451,9 +390,10 @@ func (a *app) fillActions(g *gin.RouterGroup, service any) {
 					return
 				}
 			}
-			result := rtnList[0]
+			
+			result := rtnList[0].Interface()
 			if action.respType == respTypeStream {
-				file := result.Interface().(fs.File)
+				file := result.(fs.File)
 				stat, err := file.Stat()
 				if err != nil {
 					c.AbortWithStatus(http.StatusInternalServerError)
@@ -464,120 +404,11 @@ func (a *app) fillActions(g *gin.RouterGroup, service any) {
 				return
 			}
 
-			value := result.Interface()
-			if value == nil {
+			if result == nil {
 				c.Status(http.StatusNotFound)
 				return
 			}
-			c.JSON(http.StatusOK, gin.H{"result": value})
+			c.JSON(http.StatusOK, gin.H{"result": result})
 		})
-	}
-}
-
-// 获取该结构体里的所有receiver method
-func makeActions(service any) []reflectAction {
-
-	rawType := reflect.TypeOf(service)
-	if rawType.Kind() != reflect.Struct {
-		panic("service should be struct")
-	}
-
-	rawTypeName := strings.ToLower(rawType.Name())
-	if !strings.HasSuffix(rawTypeName, serviceSuffix) {
-		panic("struct must have suffix [Service]")
-	}
-	serviceName := strings.ReplaceAll(rawTypeName, serviceSuffix, "")
-
-	serviceValue := reflect.New(reflect.TypeOf(service))
-	serviceType := serviceValue.Type()
-
-	numMethods := serviceType.NumMethod()
-	if numMethods == 0 {
-		return nil
-	}
-
-	var actions []reflectAction
-	for i := 0; i < numMethods; i++ {
-		// 获得方法
-		methodType := serviceType.Method(i)
-
-		// 必须满足 导出 有 2个入参 2个出参
-		// 入参是context.Context Request 则认定为待映射方法
-		// 此时 出参 必须是 结构体指针 和 error
-		if !methodType.IsExported() {
-			continue
-		}
-
-		// 检查参数是否符合规定格式
-		inParams := methodType.Type.NumIn()
-		outParams := methodType.Type.NumOut()
-		if inParams != 3 || outParams != 2 {
-			continue
-		}
-
-		// 必须满足 如下 四元组
-		in1 := methodType.Type.In(1)
-		in2 := methodType.Type.In(2)
-		out0 := methodType.Type.Out(0)
-		out1 := methodType.Type.Out(1)
-
-		if !satisfyContext(in1) {
-			continue
-		}
-
-		if ok := satisfyRequest(in2); !ok {
-			continue
-		}
-
-		respType := mustResponse(out0)
-
-		mustError(out1)
-
-		methodValue := serviceValue.Method(i)
-		action := reflectAction{
-			serviceName: strcase.ToSnake(serviceName),
-			methodName:  strcase.ToSnake(methodType.Name),
-			bindData:    reflect.New(in2).Interface(),
-			methodData:  methodValue,
-			respType:    respType,
-		}
-
-		actions = append(actions, action)
-	}
-
-	return actions
-}
-
-func satisfyContext(t reflect.Type) bool {
-	ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
-	return t.AssignableTo(ctxType)
-}
-
-func satisfyRequest(t reflect.Type) bool {
-	// 值类型 需要先变成指针
-	pt := reflect.New(t)
-	pti := reflect.TypeOf(pt.Interface())
-	reqType := reflect.TypeOf((*Request)(nil)).Elem()
-	return pti.Implements(reqType)
-}
-
-func mustResponse(t reflect.Type) string {
-	if t.Kind() != reflect.Pointer || t.Elem().Kind() != reflect.Struct {
-		panic("this position type must be a pointer of struct")
-	}
-
-	// 指针类型 直接用
-	streamType := reflect.TypeOf((*fs.File)(nil)).Elem()
-	if t.Implements(streamType) {
-		return respTypeStream
-	}
-
-	return respTypeJson
-}
-
-func mustError(t reflect.Type) {
-	errType := reflect.TypeOf((*error)(nil)).Elem()
-	if !t.Implements(errType) {
-		panic("this position type must be error")
 	}
 }
