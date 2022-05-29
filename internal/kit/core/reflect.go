@@ -8,7 +8,7 @@ import (
 	"strings"
 )
 
-const serviceSuffix = "service"
+const serviceSuffix = "Service"
 
 // 获取该结构体里的所有receiver method
 func makeActions(impl any) []reflectAction {
@@ -18,7 +18,7 @@ func makeActions(impl any) []reflectAction {
 		panic("impl should be struct")
 	}
 
-	rawTypeName := strings.ToLower(rawType.Name())
+	rawTypeName := rawType.Name()
 	if !strings.HasSuffix(rawTypeName, serviceSuffix) {
 		panic("struct must have suffix [Service]")
 	}
