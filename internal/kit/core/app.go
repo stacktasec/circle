@@ -11,7 +11,7 @@ import (
 	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
-	"github.com/stacktasec/circle/internal/kit/zlog"
+	"github.com/stacktasec/circle/internal/kit/log"
 	"go.uber.org/dig"
 	"io/fs"
 	"net/http"
@@ -141,20 +141,20 @@ func (a *app) Run() {
 	}
 
 	if a.options.enableQUIC {
-		zlog.Info("http3 server is listening on %s", a.options.addr)
+		log.Info("http3 server is listening on %s", a.options.addr)
 		if err := http3Server.ListenAndServeTLS(a.options.addr, a.options.cert); err != nil {
 			panic(err)
 		}
 	}
 
 	if a.options.enableTLS {
-		zlog.Info("https server is listening on %s", a.options.addr)
+		log.Info("https server is listening on %s", a.options.addr)
 		if err := httpServer.ListenAndServeTLS(a.options.cert, a.options.key); err != nil {
 			panic(err)
 		}
 	}
 
-	zlog.Info("http server is listening on %s", a.options.addr)
+	log.Info("http server is listening on %s", a.options.addr)
 	if err := httpServer.ListenAndServe(); err != nil {
 		panic(err)
 	}
@@ -165,7 +165,7 @@ func (a *app) watch() {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				zlog.Panic(r)
+				log.Panic(r)
 			}
 		}()
 
@@ -175,7 +175,7 @@ func (a *app) watch() {
 		for t := range ticker.C {
 			cpuPercents, err := cpu.Percent(time.Second*5, true)
 			if err != nil || len(cpuPercents) == 0 {
-				zlog.Error("watch cpu percent error %s,%s", t, err)
+				log.Error("watch cpu percent error %s,%s", t, err)
 				a.loadValue.Store(false)
 				continue
 			}
@@ -191,7 +191,7 @@ func (a *app) watch() {
 
 			stat, err := mem.VirtualMemory()
 			if err != nil {
-				zlog.Error("watch mem usage error %s,%s", t, err)
+				log.Error("watch mem usage error %s,%s", t, err)
 				a.loadValue.Store(false)
 				continue
 			}
