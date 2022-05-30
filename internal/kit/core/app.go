@@ -61,6 +61,10 @@ func (a *app) Map(groups ...*versionGroup) {
 }
 
 func (a *app) Provide(constructors ...any) {
+	for _, c := range constructors {
+		verifyConstructor(c)
+	}
+
 	for _, item := range constructors {
 		if err := a.container.Provide(item); err != nil {
 			panic(err)
@@ -218,25 +222,25 @@ type reflectAction struct {
 
 func (a *app) fillGroups(vg *versionGroup) {
 
-	for _, service := range vg.stableServices {
+	for _, constructor := range vg.stableConstructors {
 		g := a.baseGroup.Group(fmt.Sprintf("/v%d", vg.mainVersion))
-		a.fillActions(g, service)
+		a.fillActions(g, constructor)
 	}
 
-	for _, service := range vg.betaServices {
+	for _, constructor := range vg.betaConstructors {
 		g := a.baseGroup.Group(fmt.Sprintf("/v%dbeta", vg.mainVersion))
-		a.fillActions(g, service)
+		a.fillActions(g, constructor)
 	}
 
-	for _, service := range vg.alphaServices {
+	for _, constructor := range vg.alphaConstructors {
 		g := a.baseGroup.Group(fmt.Sprintf("/v%dalpha", vg.mainVersion))
-		a.fillActions(g, service)
+		a.fillActions(g, constructor)
 	}
 }
 
-func (a *app) fillActions(g *gin.RouterGroup, service any) {
+func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 
-	actions := a.makeActions(service)
+	actions := a.makeActions(constructor)
 
 	for _, action := range actions {
 

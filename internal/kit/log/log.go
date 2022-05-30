@@ -76,7 +76,7 @@ func (o *options) ensure() {
 	switch o.stacktrace {
 	case levelDebug, levelInfo, levelWarn, levelError, levelFatal:
 	default:
-		o.level = levelError
+		o.stacktrace = levelError
 	}
 
 	if o.callerSkip == 0 {

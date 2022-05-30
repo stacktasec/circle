@@ -5,40 +5,44 @@ import (
 	"github.com/iancoleman/strcase"
 	"io/fs"
 	"reflect"
+	"runtime"
 	"strings"
 )
 
-const (
-	methodInit = "Init"
-)
+func (a *app) makeActions(constructor any) []reflectAction {
 
-// 获取该结构体里的所有receiver method
-func (a *app) makeActions(service any) []reflectAction {
+	verifyConstructor(constructor)
 
-	structType := reflect.TypeOf(service)
-	if structType.Kind() != reflect.Struct {
-		panic("service must be struct")
+	funcType := reflect.TypeOf(constructor)
+	funcValue := reflect.ValueOf(constructor)
+
+	numIn := funcType.NumIn()
+	var params []reflect.Type
+	for i := 0; i < numIn; i++ {
+		t := funcType.In(i)
+		params = append(params, reflect.New(t).Elem().Type())
 	}
 
-	pointerValue := reflect.New(structType)
-	pointerType := pointerValue.Type()
+	var rtn any
 
-	typeName := structType.Name()
+	invokerType := reflect.FuncOf(params, nil, false)
+	invokerValue := reflect.MakeFunc(invokerType, func(args []reflect.Value) (results []reflect.Value) {
+		rtnList := funcValue.Call(args)
+		rtn = rtnList[0].Interface()
+		return nil
+	})
 
-	initValue := pointerValue.MethodByName(methodInit)
-	if !initValue.IsValid() {
-		panic("service must have method Init")
-	}
-	initValueData := initValue.Interface()
-	if err := a.container.Invoke(initValueData); err != nil {
+	if err := a.container.Invoke(invokerValue.Interface()); err != nil {
 		panic(err)
 	}
+
+	pointerValue := reflect.ValueOf(rtn)
+	pointerType := pointerValue.Type()
 
 	var actions []reflectAction
 	for i := 0; i < pointerType.NumMethod(); i++ {
 		// 获得方法
 		method := pointerType.Method(i)
-		methodType := method.Type
 
 		// 必须满足 导出 有 2个入参 2个出参
 		// 入参是context.Context Request 则认定为待映射方法
@@ -47,6 +51,7 @@ func (a *app) makeActions(service any) []reflectAction {
 			continue
 		}
 
+		methodType := method.Type
 		// 检查参数是否符合规定格式
 		inParams := methodType.NumIn()
 		outParams := methodType.NumOut()
@@ -72,7 +77,7 @@ func (a *app) makeActions(service any) []reflectAction {
 
 		mustError(out1)
 
-		svcName, methodName := a.makeName(typeName, method.Name)
+		svcName, methodName := a.makeName(pointerType.Elem().Name(), method.Name)
 		action := reflectAction{
 			serviceName: svcName,
 			methodName:  methodName,
@@ -130,5 +135,42 @@ func mustError(t reflect.Type) {
 	errType := reflect.TypeOf((*error)(nil)).Elem()
 	if !t.Implements(errType) {
 		panic("this position type must be error")
+	}
+}
+
+func verifyConstructor(constructor any) {
+	// 只接受 函数
+	funcType := reflect.TypeOf(constructor)
+	if funcType.Kind() != reflect.Func {
+		panic("constructor must be func")
+	}
+
+	var funcName string
+	name := runtime.FuncForPC(reflect.ValueOf(constructor).Pointer()).Name()
+	arr := strings.Split(name, ".")
+	if len(arr) == 1 {
+		funcName = arr[0]
+	} else {
+		funcName = arr[len(arr)-1]
+	}
+
+	// 必须 New开头
+	if !strings.HasPrefix(funcName, "New") {
+		panic("constructor must start with New")
+	}
+
+	// 不能是可变函数
+	if funcType.IsVariadic() {
+		panic("do not accept variadic func")
+	}
+
+	// return值暂时只支持1个
+	if funcType.NumOut() != 1 {
+		panic("only support one return value")
+	}
+
+	// return值暂时支持1个
+	if funcType.Out(0).Kind() != reflect.Pointer && funcType.Out(0).Kind() != reflect.Interface {
+		panic("rtn value type must be pointer or interface")
 	}
 }
