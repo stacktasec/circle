@@ -16,12 +16,9 @@ import (
 	"io/fs"
 	"net/http"
 	"reflect"
-	"sync"
 	"sync/atomic"
 	"time"
 )
-
-var once sync.Once
 
 const keyRequestID = "X-Request-ID"
 
@@ -40,22 +37,17 @@ type app struct {
 	loadValue     atomic.Value
 }
 
-// NewApp 每个进程最多调用一次
 func NewApp(opts ...AppOption) *app {
 
-	var instance *app
-	once.Do(func() {
-		o := &options{}
+	o := &options{}
 
-		for _, opt := range opts {
-			opt.apply(o)
-		}
+	for _, opt := range opts {
+		opt.apply(o)
+	}
 
-		o.ensure()
-		instance = &app{container: dig.New(), options: *o, versionGroups: make(map[int]*versionGroup)}
-	})
+	o.ensure()
 
-	return instance
+	return &app{container: dig.New(), options: *o, versionGroups: make(map[int]*versionGroup)}
 }
 
 func (a *app) Map(groups ...*versionGroup) {
@@ -109,7 +101,7 @@ func (a *app) build() {
 
 	r.Use(cors.Default())
 
-	a.customDiscovery(r)
+	a.discovery(r)
 
 	baseGroup := r.Group(a.options.baseURL)
 	a.baseGroup = baseGroup
@@ -123,13 +115,9 @@ func (a *app) build() {
 	a.engine = r
 }
 
-func (a *app) customDiscovery(r *gin.Engine) {
+func (a *app) discovery(r *gin.Engine) {
 	r.GET("/", func(c *gin.Context) {
 		welcomeMsg := "Welcome"
-		if a.options.appID != "" {
-			welcomeMsg = fmt.Sprintf("%s to %s", welcomeMsg, a.options.appID)
-		}
-
 		c.String(http.StatusOK, welcomeMsg)
 	})
 }

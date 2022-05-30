@@ -6,8 +6,6 @@ import (
 )
 
 type options struct {
-	appID string
-
 	addr string
 
 	enableTLS  bool
@@ -55,12 +53,6 @@ type appOptionFunc func(opts *options)
 
 func (opt appOptionFunc) apply(opts *options) {
 	opt(opts)
-}
-
-func WithAppID(appID string) AppOption {
-	return appOptionFunc(func(opts *options) {
-		opts.appID = appID
-	})
 }
 
 func WithAddr(addr string) AppOption {
