@@ -215,7 +215,7 @@ type reflectAction struct {
 	// 用来绑定的数据
 	bindData any
 	// 用来调用的
-	methodData reflect.Value
+	methodValue reflect.Value
 	// 请求 返回类型
 	respType string
 }
@@ -245,7 +245,7 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 	for _, action := range actions {
 
 		g.POST(fmt.Sprintf("/%s/%s", action.serviceName, action.methodName), func(c *gin.Context) {
-			if ok := a.handleHeader(c); !ok {
+			if ok := a.handleInterceptors(c); !ok {
 				return
 			}
 
@@ -272,7 +272,7 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 
 			ctxValue := reflect.ValueOf(timeoutCtx)
 			reqValue := reflect.ValueOf(req).Elem()
-			rtnList := action.methodData.Call([]reflect.Value{ctxValue, reqValue})
+			rtnList := action.methodValue.Call([]reflect.Value{ctxValue, reqValue})
 
 			// 判断第二个值 是自定义错误
 			// 还是原生error
@@ -315,7 +315,7 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 	}
 }
 
-func (a *app) handleHeader(c *gin.Context) bool {
+func (a *app) handleInterceptors(c *gin.Context) bool {
 	h := c.Request.Header
 
 	if a.options.idInterceptor != nil {

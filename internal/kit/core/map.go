@@ -82,7 +82,7 @@ func (a *app) makeActions(constructor any) []reflectAction {
 			serviceName: svcName,
 			methodName:  methodName,
 			bindData:    reflect.New(in2).Interface(),
-			methodData:  pointerValue.Method(i),
+			methodValue: pointerValue.Method(i),
 			respType:    respType,
 		}
 
