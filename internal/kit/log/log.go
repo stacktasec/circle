@@ -61,6 +61,8 @@ const (
 type options struct {
 	level      string
 	stacktrace string
+	json       bool
+
 	callerSkip int
 }
 
@@ -121,6 +123,12 @@ func WithStacktrace(level string) Option {
 	})
 }
 
+func WithJson() Option {
+	return logOptionFunc(func(opts *options) {
+		opts.json = true
+	})
+}
+
 // internal config
 func withCallerSkip(skip int) Option {
 	return logOptionFunc(func(opts *options) {
@@ -149,9 +157,15 @@ func NewLogger(opts ...Option) Logger {
 		EncodeCaller:  zapcore.ShortCallerEncoder,
 	}
 
+	var encoding string
+	if o.json {
+		encoding = "json"
+	} else {
+		encoding = "console"
+	}
 	config := zap.Config{
 		Level:            zap.NewAtomicLevelAt(convert(o.level)),
-		Encoding:         "console",
+		Encoding:         encoding,
 		EncoderConfig:    encoderConfig,
 		OutputPaths:      []string{"stdout"},
 		ErrorOutputPaths: []string{"stderr"},
