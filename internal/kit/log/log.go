@@ -129,8 +129,7 @@ func WithJson() Option {
 	})
 }
 
-// internal config
-func withCallerSkip(skip int) Option {
+func internalWithSkip(skip int) Option {
 	return logOptionFunc(func(opts *options) {
 		opts.callerSkip = skip
 	})
@@ -179,7 +178,7 @@ func NewLogger(opts ...Option) Logger {
 var builtinLogger Logger
 
 func init() {
-	builtinLogger = NewLogger(withCallerSkip(2))
+	builtinLogger = NewLogger(internalWithSkip(2))
 }
 
 func Debug(format any, a ...any) {
