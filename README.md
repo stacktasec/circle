@@ -40,3 +40,5 @@
 wasm的使用 在浏览器做审核
 使用Dig注入数据库等依赖
 Dig注入日志 日志现在是接口类 Ctx直接注入到日志追踪
+
+https://github.com/ConsenSys/gnark 零知识证明系统
