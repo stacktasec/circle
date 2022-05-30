@@ -165,7 +165,7 @@ func (a *app) watch() {
 	go func() {
 		defer func() {
 			if r := recover(); r != nil {
-				log.Panic(r)
+				log.Error(r)
 			}
 		}()
 
