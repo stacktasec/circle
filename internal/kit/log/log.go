@@ -60,6 +60,7 @@ const (
 
 type options struct {
 	level      string
+	stacktrace string
 	callerSkip int
 }
 
@@ -68,6 +69,12 @@ func (o *options) ensure() {
 	case levelDebug, levelInfo, levelWarn, levelError, levelFatal:
 	default:
 		o.level = levelDebug
+	}
+
+	switch o.stacktrace {
+	case levelDebug, levelInfo, levelWarn, levelError, levelFatal:
+	default:
+		o.level = levelError
 	}
 
 	if o.callerSkip == 0 {
@@ -108,6 +115,12 @@ func WithLevel(level string) Option {
 	})
 }
 
+func WithStacktrace(level string) Option {
+	return logOptionFunc(func(opts *options) {
+		opts.stacktrace = level
+	})
+}
+
 // internal config
 func withCallerSkip(skip int) Option {
 	return logOptionFunc(func(opts *options) {
@@ -144,7 +157,7 @@ func NewLogger(opts ...Option) Logger {
 		ErrorOutputPaths: []string{"stderr"},
 	}
 
-	logger, _ := config.Build(zap.AddCallerSkip(o.callerSkip), zap.AddStacktrace(zap.ErrorLevel))
+	logger, _ := config.Build(zap.AddCallerSkip(o.callerSkip), zap.AddStacktrace(convert(o.stacktrace)))
 
 	return &zapLogger{logger: logger}
 }
