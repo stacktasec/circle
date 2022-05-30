@@ -108,7 +108,8 @@ func WithLevel(level string) Option {
 	})
 }
 
-func WithCallerSkip(skip int) Option {
+// internal config
+func withCallerSkip(skip int) Option {
 	return logOptionFunc(func(opts *options) {
 		opts.callerSkip = skip
 	})
@@ -124,25 +125,26 @@ func NewLogger(opts ...Option) Logger {
 	o.ensure()
 
 	encoderConfig := zapcore.EncoderConfig{
-		TimeKey:      "time",
-		LevelKey:     "level",
-		CallerKey:    "caller",
-		MessageKey:   "msg",
-		EncodeLevel:  zapcore.LowercaseColorLevelEncoder,
-		EncodeTime:   zapcore.ISO8601TimeEncoder,
-		EncodeCaller: zapcore.ShortCallerEncoder,
+		MessageKey:    "msg",
+		LevelKey:      "level",
+		TimeKey:       "time",
+		CallerKey:     "caller",
+		FunctionKey:   "func",
+		StacktraceKey: "stacktrace",
+		EncodeLevel:   zapcore.LowercaseColorLevelEncoder,
+		EncodeTime:    zapcore.ISO8601TimeEncoder,
+		EncodeCaller:  zapcore.ShortCallerEncoder,
 	}
 
 	config := zap.Config{
+		Level:            zap.NewAtomicLevelAt(convert(o.level)),
 		Encoding:         "console",
 		EncoderConfig:    encoderConfig,
 		OutputPaths:      []string{"stdout"},
 		ErrorOutputPaths: []string{"stderr"},
-		Level:            zap.NewAtomicLevelAt(convert(o.level)),
 	}
 
-	logger, _ := config.Build()
-	logger = logger.WithOptions(zap.AddCallerSkip(o.callerSkip))
+	logger, _ := config.Build(zap.AddCallerSkip(o.callerSkip), zap.AddStacktrace(zap.ErrorLevel))
 
 	return &zapLogger{logger: logger}
 }
@@ -150,7 +152,7 @@ func NewLogger(opts ...Option) Logger {
 var builtinLogger Logger
 
 func init() {
-	builtinLogger = NewLogger(WithCallerSkip(2))
+	builtinLogger = NewLogger(withCallerSkip(2))
 }
 
 func Debug(format any, a ...any) {
