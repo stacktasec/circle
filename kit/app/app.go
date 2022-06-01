@@ -13,6 +13,8 @@ type App interface {
 	Run()
 }
 
+type Request = internal.Request
+
 var _ App = (*gin.App)(nil)
 
 func NewGroup(mainVersion int) *internal.VersionGroup {
