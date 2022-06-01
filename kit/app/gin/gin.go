@@ -1,4 +1,4 @@
-package core
+package gin
 
 import (
 	"context"
@@ -7,14 +7,17 @@ import (
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
+	"github.com/iancoleman/strcase"
 	"github.com/juju/ratelimit"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
-	"github.com/stacktasec/circle/internal/kit/klog"
+	"github.com/stacktasec/circle/kit/app/internal"
+	"github.com/stacktasec/circle/kit/klog"
 	"go.uber.org/dig"
 	"io/fs"
 	"net/http"
 	"reflect"
+	"strings"
 	"sync/atomic"
 	"time"
 )
@@ -26,39 +29,39 @@ const (
 	respTypeStream = "stream"
 )
 
-type app struct {
+type App struct {
 	container     *dig.Container
-	options       options
-	versionGroups map[int]*versionGroup
+	options       internal.Options
+	versionGroups map[int]*internal.VersionGroup
 	engine        *gin.Engine
 	limitBucket   *ratelimit.Bucket
 	loadValue     atomic.Value
 }
 
-func NewApp(opts ...AppOption) *app {
+func NewApp(opts ...internal.AppOption) *App {
 
-	o := &options{}
+	o := &internal.Options{}
 
 	for _, opt := range opts {
-		opt.apply(o)
+		opt.Apply(o)
 	}
 
-	o.ensure()
+	o.Ensure()
 
-	return &app{container: dig.New(), options: *o, versionGroups: make(map[int]*versionGroup)}
+	return &App{container: dig.New(), options: *o, versionGroups: make(map[int]*internal.VersionGroup)}
 }
 
-func (a *app) Map(groups ...*versionGroup) {
+func (a *App) Map(groups ...*internal.VersionGroup) {
 	for _, g := range groups {
-		_, ok := a.versionGroups[g.mainVersion]
+		_, ok := a.versionGroups[g.MainVersion]
 		if ok {
 			panic("duplicated main version")
 		}
-		a.versionGroups[g.mainVersion] = g
+		a.versionGroups[g.MainVersion] = g
 	}
 }
 
-func (a *app) Provide(constructors ...any) {
+func (a *App) Provide(constructors ...any) {
 	for _, c := range constructors {
 		verifyConstructor(c)
 	}
@@ -70,39 +73,39 @@ func (a *app) Provide(constructors ...any) {
 	}
 }
 
-func (a *app) Run() {
+func (a *App) Run() {
 	a.build()
 
-	if a.options.enableOverloadBreak {
+	if a.options.EnableOverloadBreak {
 		a.watch()
 	}
 
 	httpServer := http.Server{
-		Addr:           a.options.addr,
+		Addr:           a.options.Addr,
 		Handler:        a.engine,
 		ReadTimeout:    time.Second * 10,
 		WriteTimeout:   time.Second * 10,
 		MaxHeaderBytes: 1 << 16,
 	}
 
-	if a.options.enableTLS {
-		klog.Info("https server is listening on %s", a.options.addr)
-		if err := httpServer.ListenAndServeTLS(a.options.cert, a.options.key); err != nil {
+	if a.options.EnableTLS {
+		klog.Info("https server is listening on %s", a.options.Addr)
+		if err := httpServer.ListenAndServeTLS(a.options.Cert, a.options.Key); err != nil {
 			panic(err)
 		}
 	}
 
-	klog.Info("http server is listening on %s", a.options.addr)
+	klog.Info("http server is listening on %s", a.options.Addr)
 	if err := httpServer.ListenAndServe(); err != nil {
 		panic(err)
 	}
 }
 
-func (a *app) build() {
+func (a *App) build() {
 
 	r := gin.Default()
 
-	if a.options.enableOverloadBreak {
+	if a.options.EnableOverloadBreak {
 		r.Use(func(c *gin.Context) {
 			value := a.loadValue.Load()
 			if value == true {
@@ -113,8 +116,8 @@ func (a *app) build() {
 		})
 	}
 
-	if a.options.enableRateLimit {
-		a.limitBucket = ratelimit.NewBucketWithQuantum(a.options.fillInterval, a.options.capacity, a.options.quantum)
+	if a.options.EnableRateLimit {
+		a.limitBucket = ratelimit.NewBucketWithQuantum(a.options.FillInterval, a.options.Capacity, a.options.Quantum)
 		r.Use(func(c *gin.Context) {
 			count := a.limitBucket.TakeAvailable(1)
 			if count == 0 {
@@ -134,7 +137,7 @@ func (a *app) build() {
 	a.discovery(r)
 
 	for _, g := range a.versionGroups {
-		a.fillGroups(r.Group(a.options.baseURL), g)
+		a.fillGroups(r.Group(a.options.BaseURL), g)
 	}
 
 	r.Use(gzip.Gzip(gzip.DefaultCompression))
@@ -142,14 +145,14 @@ func (a *app) build() {
 	a.engine = r
 }
 
-func (a *app) discovery(r *gin.Engine) {
+func (a *App) discovery(r *gin.Engine) {
 	r.GET("/", func(c *gin.Context) {
 		welcomeMsg := "Welcome"
 		c.String(http.StatusOK, welcomeMsg)
 	})
 }
 
-func (a *app) watch() {
+func (a *App) watch() {
 
 	go func() {
 		defer func() {
@@ -173,7 +176,7 @@ func (a *app) watch() {
 			for _, u := range cpuPercents {
 				sum += u
 			}
-			if sum/float64(len(cpuPercents)) > a.options.maxCpuPercent {
+			if sum/float64(len(cpuPercents)) > a.options.MaxCpuPercent {
 				a.loadValue.Store(true)
 				continue
 			}
@@ -184,7 +187,7 @@ func (a *app) watch() {
 				a.loadValue.Store(false)
 				continue
 			}
-			if stat.UsedPercent > a.options.maxMemPercent {
+			if stat.UsedPercent > a.options.MaxMemPercent {
 				a.loadValue.Store(true)
 				continue
 			}
@@ -205,25 +208,121 @@ type reflectAction struct {
 	respType string
 }
 
-func (a *app) fillGroups(routerGroup *gin.RouterGroup, vg *versionGroup) {
+func (a *App) makeActions(constructor any) []reflectAction {
 
-	for _, constructor := range vg.stableConstructors {
-		g := routerGroup.Group(fmt.Sprintf("/v%d", vg.mainVersion))
+	verifyConstructor(constructor)
+
+	funcType := reflect.TypeOf(constructor)
+	funcValue := reflect.ValueOf(constructor)
+
+	numIn := funcType.NumIn()
+	var params []reflect.Type
+	for i := 0; i < numIn; i++ {
+		t := funcType.In(i)
+		params = append(params, reflect.New(t).Elem().Type())
+	}
+
+	var rtn any
+
+	invokerType := reflect.FuncOf(params, nil, false)
+	invokerValue := reflect.MakeFunc(invokerType, func(args []reflect.Value) (results []reflect.Value) {
+		rtnList := funcValue.Call(args)
+		rtn = rtnList[0].Interface()
+		return nil
+	})
+
+	if err := a.container.Invoke(invokerValue.Interface()); err != nil {
+		panic(err)
+	}
+
+	pointerValue := reflect.ValueOf(rtn)
+	pointerType := pointerValue.Type()
+
+	var actions []reflectAction
+	for i := 0; i < pointerType.NumMethod(); i++ {
+		// 获得方法
+		method := pointerType.Method(i)
+
+		// 必须满足 导出 有 2个入参 2个出参
+		// 入参是context.Context Request 则认定为待映射方法
+		// 此时 出参 必须是 结构体指针 和 error
+		if !method.IsExported() {
+			continue
+		}
+
+		methodType := method.Type
+		// 检查参数是否符合规定格式
+		inParams := methodType.NumIn()
+		outParams := methodType.NumOut()
+		if inParams != 3 || outParams != 2 {
+			continue
+		}
+
+		// 必须满足 如下 四元组
+		in1 := methodType.In(1)
+		in2 := methodType.In(2)
+		out0 := methodType.Out(0)
+		out1 := methodType.Out(1)
+
+		if !satisfyContext(in1) {
+			continue
+		}
+
+		if !satisfyRequest(in2) {
+			continue
+		}
+
+		respType := mustResponse(out0)
+
+		mustError(out1)
+
+		svcName, methodName := a.makeName(pointerType.Elem().Name(), method.Name)
+		action := reflectAction{
+			serviceName: svcName,
+			methodName:  methodName,
+			bindData:    reflect.New(in2).Interface(),
+			methodValue: pointerValue.Method(i),
+			respType:    respType,
+		}
+
+		actions = append(actions, action)
+	}
+
+	return actions
+}
+
+func (a *App) makeName(resource, action string) (string, string) {
+	lr := strings.ToLower(resource)
+
+	for _, s := range a.options.Suffixes {
+		if strings.HasSuffix(lr, s) {
+			lr = strings.ReplaceAll(lr, s, "")
+			break
+		}
+	}
+
+	return strcase.ToSnake(lr), strcase.ToSnake(action)
+}
+
+func (a *App) fillGroups(routerGroup *gin.RouterGroup, vg *internal.VersionGroup) {
+
+	for _, constructor := range vg.StableConstructors {
+		g := routerGroup.Group(fmt.Sprintf("/v%d", vg.MainVersion))
 		a.fillActions(g, constructor)
 	}
 
-	for _, constructor := range vg.betaConstructors {
-		g := routerGroup.Group(fmt.Sprintf("/v%dbeta", vg.mainVersion))
+	for _, constructor := range vg.BetaConstructors {
+		g := routerGroup.Group(fmt.Sprintf("/v%dbeta", vg.MainVersion))
 		a.fillActions(g, constructor)
 	}
 
-	for _, constructor := range vg.alphaConstructors {
-		g := routerGroup.Group(fmt.Sprintf("/v%dalpha", vg.mainVersion))
+	for _, constructor := range vg.AlphaConstructors {
+		g := routerGroup.Group(fmt.Sprintf("/v%dalpha", vg.MainVersion))
 		a.fillActions(g, constructor)
 	}
 }
 
-func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
+func (a *App) fillActions(g *gin.RouterGroup, constructor any) {
 
 	actions := a.makeActions(constructor)
 
@@ -240,7 +339,7 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 				return
 			}
 
-			i := req.(Request)
+			i := req.(internal.Request)
 			if err := i.Validate(); err != nil {
 				c.AbortWithStatus(http.StatusBadRequest)
 				return
@@ -250,7 +349,7 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 
 			reqID := uuid.NewString()
 			ctx = context.WithValue(ctx, keyRequestID, reqID)
-			timeoutCtx, cancel := context.WithTimeout(ctx, a.options.ctxTimeout)
+			timeoutCtx, cancel := context.WithTimeout(ctx, a.options.CtxTimeout)
 			defer cancel()
 
 			c.Writer.Header().Set(keyRequestID, reqID)
@@ -268,7 +367,7 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 					return
 				}
 
-				err, ok := errValue.(knownError)
+				err, ok := errValue.(internal.KnownError)
 				if ok {
 					c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err})
 					return
@@ -300,18 +399,18 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 	}
 }
 
-func (a *app) handleInterceptors(c *gin.Context) bool {
+func (a *App) handleInterceptors(c *gin.Context) bool {
 	h := c.Request.Header
 
-	if a.options.idInterceptor != nil {
-		if err := a.options.idInterceptor(h); err != nil {
+	if a.options.IDInterceptor != nil {
+		if err := a.options.IDInterceptor(h); err != nil {
 			c.AbortWithStatus(http.StatusUnauthorized)
 			return false
 		}
 
 		// 隐含：必须有身份 才有权限
-		if a.options.permInterceptor != nil {
-			if err := a.options.permInterceptor(h); err != nil {
+		if a.options.PermInterceptor != nil {
+			if err := a.options.PermInterceptor(h); err != nil {
 				c.AbortWithStatus(http.StatusForbidden)
 				return false
 			}
