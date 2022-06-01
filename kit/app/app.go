@@ -87,9 +87,9 @@ func WithRateLimit(fillInterval time.Duration, capacity, quantum int) internal.A
 	})
 }
 
-func WithOverloadBreak(maxCpu, maxMem float64) internal.AppOption {
+func WithLoadLimit(maxCpu, maxMem float64) internal.AppOption {
 	return internal.OptionFunc(func(opts *internal.Options) {
-		opts.EnableOverloadBreak = true
+		opts.EnableLoadLimit = true
 		opts.MaxCpuPercent = maxCpu
 		opts.MaxMemPercent = maxMem
 	})

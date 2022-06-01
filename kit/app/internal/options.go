@@ -35,9 +35,9 @@ type Options struct {
 	Capacity        int64
 	Quantum         int64
 
-	EnableOverloadBreak bool
-	MaxCpuPercent       float64
-	MaxMemPercent       float64
+	EnableLoadLimit bool
+	MaxCpuPercent   float64
+	MaxMemPercent   float64
 }
 
 func (o *Options) Ensure() {

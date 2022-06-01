@@ -28,7 +28,7 @@ type App struct {
 	versionGroups map[int]*internal.VersionGroup
 	engine        *gin.Engine
 	limitBucket   *ratelimit.Bucket
-	loadValue     atomic.Value
+	overload      atomic.Value
 }
 
 func NewApp(opts ...internal.AppOption) *App {
@@ -55,7 +55,7 @@ func (a *App) Map(groups ...*internal.VersionGroup) {
 func (a *App) Run() {
 	a.build()
 
-	if a.options.EnableOverloadBreak {
+	if a.options.EnableLoadLimit {
 		a.watch()
 	}
 
@@ -84,9 +84,9 @@ func (a *App) build() {
 
 	r := gin.Default()
 
-	if a.options.EnableOverloadBreak {
+	if a.options.EnableLoadLimit {
 		r.Use(func(c *gin.Context) {
-			value := a.loadValue.Load()
+			value := a.overload.Load()
 			if value == true {
 				c.AbortWithStatus(http.StatusServiceUnavailable)
 				return
@@ -147,7 +147,7 @@ func (a *App) watch() {
 			cpuPercents, err := cpu.Percent(time.Second*5, true)
 			if err != nil || len(cpuPercents) == 0 {
 				klog.Error("watch cpu percent error %s,%s", t, err)
-				a.loadValue.Store(false)
+				a.overload.Store(false)
 				continue
 			}
 
@@ -156,18 +156,18 @@ func (a *App) watch() {
 				sum += u
 			}
 			if sum/float64(len(cpuPercents)) > a.options.MaxCpuPercent {
-				a.loadValue.Store(true)
+				a.overload.Store(true)
 				continue
 			}
 
 			stat, err := mem.VirtualMemory()
 			if err != nil {
 				klog.Error("watch mem usage error %s,%s", t, err)
-				a.loadValue.Store(false)
+				a.overload.Store(false)
 				continue
 			}
 			if stat.UsedPercent > a.options.MaxMemPercent {
-				a.loadValue.Store(true)
+				a.overload.Store(true)
 				continue
 			}
 		}
