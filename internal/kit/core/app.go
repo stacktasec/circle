@@ -31,7 +31,6 @@ type app struct {
 	options       options
 	versionGroups map[int]*versionGroup
 	engine        *gin.Engine
-	baseGroup     *gin.RouterGroup
 	limitBucket   *ratelimit.Bucket
 	loadValue     atomic.Value
 }
@@ -106,11 +105,8 @@ func (a *app) build() {
 
 	a.discovery(r)
 
-	baseGroup := r.Group(a.options.baseURL)
-	a.baseGroup = baseGroup
-
 	for _, g := range a.versionGroups {
-		a.fillGroups(g)
+		a.fillGroups(r.Group(a.options.baseURL), g)
 	}
 
 	r.Use(gzip.Gzip(gzip.DefaultCompression))
@@ -209,20 +205,20 @@ type reflectAction struct {
 	respType string
 }
 
-func (a *app) fillGroups(vg *versionGroup) {
+func (a *app) fillGroups(routerGroup *gin.RouterGroup, vg *versionGroup) {
 
 	for _, constructor := range vg.stableConstructors {
-		g := a.baseGroup.Group(fmt.Sprintf("/v%d", vg.mainVersion))
+		g := routerGroup.Group(fmt.Sprintf("/v%d", vg.mainVersion))
 		a.fillActions(g, constructor)
 	}
 
 	for _, constructor := range vg.betaConstructors {
-		g := a.baseGroup.Group(fmt.Sprintf("/v%dbeta", vg.mainVersion))
+		g := routerGroup.Group(fmt.Sprintf("/v%dbeta", vg.mainVersion))
 		a.fillActions(g, constructor)
 	}
 
 	for _, constructor := range vg.alphaConstructors {
-		g := a.baseGroup.Group(fmt.Sprintf("/v%dalpha", vg.mainVersion))
+		g := routerGroup.Group(fmt.Sprintf("/v%dalpha", vg.mainVersion))
 		a.fillActions(g, constructor)
 	}
 }
