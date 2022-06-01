@@ -78,12 +78,11 @@ func WithPermInterceptor(p func(h http.Header) error) internal.AppOption {
 	})
 }
 
-func WithRateLimit(fillInterval time.Duration, capacity, quantum int) internal.AppOption {
+func WithRateLimit(fillInterval time.Duration, capacity int) internal.AppOption {
 	return internal.OptionFunc(func(opts *internal.Options) {
 		opts.EnableRateLimit = true
 		opts.FillInterval = fillInterval
 		opts.Capacity = int64(capacity)
-		opts.Quantum = int64(quantum)
 	})
 }
 
