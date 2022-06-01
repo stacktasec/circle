@@ -96,7 +96,7 @@ func (a *App) build() {
 	}
 
 	if a.options.EnableRateLimit {
-		a.limitBucket = ratelimit.NewBucketWithQuantum(a.options.FillInterval, a.options.Capacity, a.options.Quantum)
+		a.limitBucket = ratelimit.NewBucket(a.options.FillInterval, a.options.Capacity)
 		r.Use(func(c *gin.Context) {
 			count := a.limitBucket.TakeAvailable(1)
 			if count == 0 {
