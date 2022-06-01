@@ -44,3 +44,7 @@ Dig注入日志 日志现在是接口类 Ctx直接注入到日志追踪
 https://github.com/ConsenSys/gnark 零知识证明系统  平台 可编程 且可以联合
 数据可以中心化存储，只不过，想被另外的中心的使用的时候，不需要直接提供，而是可以用一个可编程的
 零知识证明平台提供，这个平台可以得到自己的结果，却可以不看数据本身
+
+https://github.com/RocketChat/Rocket.Chat  
+https://github.com/webtorrent/webtorrent
+都可以参考  自托管抖音 可发布视频 可聊天？？？后期加入推荐系统，以及零知识证明加持下的数据对接？？？
