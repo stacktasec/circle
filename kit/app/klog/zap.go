@@ -1,24 +1,23 @@
-package zap
+package klog
 
 import (
 	"fmt"
-	"github.com/stacktasec/circle/kit/klog/internal"
 	"go.uber.org/zap"
 	"go.uber.org/zap/zapcore"
 )
 
-type Logger struct {
+type zapLogger struct {
 	logger *zap.Logger
 }
 
-func NewLogger(opts ...internal.Option) *Logger {
-	o := &internal.Options{}
+func InitLogger(opts ...Option) {
+	o := &options{}
 
 	for _, opt := range opts {
-		opt.Apply(o)
+		opt.apply(o)
 	}
 
-	o.Ensure()
+	o.ensure()
 
 	encoderConfig := zapcore.EncoderConfig{
 		MessageKey:    "msg",
@@ -32,67 +31,61 @@ func NewLogger(opts ...internal.Option) *Logger {
 		EncodeCaller:  zapcore.ShortCallerEncoder,
 	}
 
-	var encoding string
-	if o.Json {
-		encoding = "json"
-	} else {
-		encoding = "console"
-	}
 	config := zap.Config{
-		Level:            zap.NewAtomicLevelAt(convert(o.Level)),
-		Encoding:         encoding,
+		Level:            zap.NewAtomicLevelAt(convert(o.level)),
+		Encoding:         "console",
 		EncoderConfig:    encoderConfig,
 		OutputPaths:      []string{"stdout"},
 		ErrorOutputPaths: []string{"stderr"},
 	}
 
-	logger, _ := config.Build(zap.AddCallerSkip(o.CallerSkip), zap.AddStacktrace(convert(o.Stacktrace)))
+	l, _ := config.Build(zap.AddCallerSkip(2))
 
-	return &Logger{logger: logger}
+	logger = &zapLogger{logger: l}
 }
 
 func convert(level string) zapcore.Level {
 	switch level {
-	case internal.LevelDebug:
+	case LevelDebug:
 		return zapcore.DebugLevel
-	case internal.LevelInfo:
+	case LevelInfo:
 		return zapcore.InfoLevel
-	case internal.LevelWarn:
+	case LevelWarn:
 		return zapcore.WarnLevel
-	case internal.LevelError:
+	case LevelError:
 		return zapcore.ErrorLevel
-	case internal.LevelFatal:
+	case LevelFatal:
 		return zapcore.FatalLevel
 	default:
 		panic("can not convert")
 	}
 }
 
-func (z *Logger) Debug(format any, a ...any) {
+func (z *zapLogger) Debug(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
 	z.logger.Debug(msg)
 }
 
-func (z *Logger) Info(format any, a ...any) {
+func (z *zapLogger) Info(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
 	z.logger.Info(msg)
 }
 
-func (z *Logger) Warn(format any, a ...any) {
+func (z *zapLogger) Warn(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
 	z.logger.Warn(msg)
 }
 
-func (z *Logger) Error(format any, a ...any) {
+func (z *zapLogger) Error(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
 	z.logger.Error(msg)
 }
 
-func (z *Logger) Fatal(format any, a ...any) {
+func (z *zapLogger) Fatal(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
 	z.logger.Fatal(msg)
 }
 
-func (z *Logger) Sync() error {
+func (z *zapLogger) Sync() error {
 	return z.logger.Sync()
 }
