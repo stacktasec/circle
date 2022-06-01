@@ -70,6 +70,34 @@ func (a *app) Provide(constructors ...any) {
 	}
 }
 
+func (a *app) Run() {
+	a.build()
+
+	if a.options.enableOverloadBreak {
+		a.watch()
+	}
+
+	httpServer := http.Server{
+		Addr:           a.options.addr,
+		Handler:        a.engine,
+		ReadTimeout:    time.Second * 10,
+		WriteTimeout:   time.Second * 10,
+		MaxHeaderBytes: 1 << 16,
+	}
+
+	if a.options.enableTLS {
+		klog.Info("https server is listening on %s", a.options.addr)
+		if err := httpServer.ListenAndServeTLS(a.options.cert, a.options.key); err != nil {
+			panic(err)
+		}
+	}
+
+	klog.Info("http server is listening on %s", a.options.addr)
+	if err := httpServer.ListenAndServe(); err != nil {
+		panic(err)
+	}
+}
+
 func (a *app) build() {
 
 	r := gin.Default()
@@ -119,34 +147,6 @@ func (a *app) discovery(r *gin.Engine) {
 		welcomeMsg := "Welcome"
 		c.String(http.StatusOK, welcomeMsg)
 	})
-}
-
-func (a *app) Run() {
-	a.build()
-
-	if a.options.enableOverloadBreak {
-		a.watch()
-	}
-
-	httpServer := http.Server{
-		Addr:           a.options.addr,
-		Handler:        a.engine,
-		ReadTimeout:    time.Second * 10,
-		WriteTimeout:   time.Second * 10,
-		MaxHeaderBytes: 1 << 16,
-	}
-
-	if a.options.enableTLS {
-		klog.Info("https server is listening on %s", a.options.addr)
-		if err := httpServer.ListenAndServeTLS(a.options.cert, a.options.key); err != nil {
-			panic(err)
-		}
-	}
-
-	klog.Info("http server is listening on %s", a.options.addr)
-	if err := httpServer.ListenAndServe(); err != nil {
-		panic(err)
-	}
 }
 
 func (a *app) watch() {
