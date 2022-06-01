@@ -8,7 +8,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/juju/ratelimit"
-	"github.com/lucas-clemente/quic-go/http3"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/stacktasec/circle/internal/kit/klog"
@@ -139,16 +138,6 @@ func (a *app) Run() {
 		ReadTimeout:    time.Second * 10,
 		WriteTimeout:   time.Second * 10,
 		MaxHeaderBytes: 1 << 16,
-	}
-	http3Server := http3.Server{
-		Server: &httpServer,
-	}
-
-	if a.options.enableQUIC {
-		klog.Info("http3 server is listening on %s", a.options.addr)
-		if err := http3Server.ListenAndServeTLS(a.options.addr, a.options.cert); err != nil {
-			panic(err)
-		}
 	}
 
 	if a.options.enableTLS {

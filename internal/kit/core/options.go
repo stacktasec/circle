@@ -8,10 +8,9 @@ import (
 type options struct {
 	addr string
 
-	enableTLS  bool
-	enableQUIC bool
-	cert       string
-	key        string
+	enableTLS bool
+	cert      string
+	key       string
 
 	baseURL    string
 	ctxTimeout time.Duration
@@ -64,14 +63,6 @@ func WithAddr(addr string) AppOption {
 func WithTLS(cert, key string) AppOption {
 	return appOptionFunc(func(opts *options) {
 		opts.enableTLS = true
-		opts.cert = cert
-		opts.key = key
-	})
-}
-
-func WithQUIC(cert, key string) AppOption {
-	return appOptionFunc(func(opts *options) {
-		opts.enableQUIC = true
 		opts.cert = cert
 		opts.key = key
 	})
