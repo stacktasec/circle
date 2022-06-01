@@ -7,7 +7,6 @@ import (
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
-	"github.com/iancoleman/strcase"
 	"github.com/juju/ratelimit"
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
@@ -17,17 +16,11 @@ import (
 	"io/fs"
 	"net/http"
 	"reflect"
-	"strings"
 	"sync/atomic"
 	"time"
 )
 
 const keyRequestID = "X-Request-ID"
-
-const (
-	respTypeJson   = "json"
-	respTypeStream = "stream"
-)
 
 type App struct {
 	container     *dig.Container
@@ -51,26 +44,12 @@ func NewApp(opts ...internal.AppOption) *App {
 	return &App{container: dig.New(), options: *o, versionGroups: make(map[int]*internal.VersionGroup)}
 }
 
-func (a *App) Map(groups ...*internal.VersionGroup) {
-	for _, g := range groups {
-		_, ok := a.versionGroups[g.MainVersion]
-		if ok {
-			panic("duplicated main version")
-		}
-		a.versionGroups[g.MainVersion] = g
-	}
+func (a *App) Provide(constructors ...any) {
+	internal.LoadConstructors(a.container, constructors...)
 }
 
-func (a *App) Provide(constructors ...any) {
-	for _, c := range constructors {
-		verifyConstructor(c)
-	}
-
-	for _, item := range constructors {
-		if err := a.container.Provide(item); err != nil {
-			panic(err)
-		}
-	}
+func (a *App) Map(groups ...*internal.VersionGroup) {
+	internal.LoadGroups(a.versionGroups, groups...)
 }
 
 func (a *App) Run() {
@@ -195,115 +174,6 @@ func (a *App) watch() {
 	}()
 }
 
-type reflectAction struct {
-	// Service 资源名称
-	serviceName string
-	// 方法名
-	methodName string
-	// 用来绑定的数据
-	bindData any
-	// 用来调用的
-	methodValue reflect.Value
-	// 请求 返回类型
-	respType string
-}
-
-func (a *App) makeActions(constructor any) []reflectAction {
-
-	verifyConstructor(constructor)
-
-	funcType := reflect.TypeOf(constructor)
-	funcValue := reflect.ValueOf(constructor)
-
-	numIn := funcType.NumIn()
-	var params []reflect.Type
-	for i := 0; i < numIn; i++ {
-		t := funcType.In(i)
-		params = append(params, reflect.New(t).Elem().Type())
-	}
-
-	var rtn any
-
-	invokerType := reflect.FuncOf(params, nil, false)
-	invokerValue := reflect.MakeFunc(invokerType, func(args []reflect.Value) (results []reflect.Value) {
-		rtnList := funcValue.Call(args)
-		rtn = rtnList[0].Interface()
-		return nil
-	})
-
-	if err := a.container.Invoke(invokerValue.Interface()); err != nil {
-		panic(err)
-	}
-
-	pointerValue := reflect.ValueOf(rtn)
-	pointerType := pointerValue.Type()
-
-	var actions []reflectAction
-	for i := 0; i < pointerType.NumMethod(); i++ {
-		// 获得方法
-		method := pointerType.Method(i)
-
-		// 必须满足 导出 有 2个入参 2个出参
-		// 入参是context.Context Request 则认定为待映射方法
-		// 此时 出参 必须是 结构体指针 和 error
-		if !method.IsExported() {
-			continue
-		}
-
-		methodType := method.Type
-		// 检查参数是否符合规定格式
-		inParams := methodType.NumIn()
-		outParams := methodType.NumOut()
-		if inParams != 3 || outParams != 2 {
-			continue
-		}
-
-		// 必须满足 如下 四元组
-		in1 := methodType.In(1)
-		in2 := methodType.In(2)
-		out0 := methodType.Out(0)
-		out1 := methodType.Out(1)
-
-		if !satisfyContext(in1) {
-			continue
-		}
-
-		if !satisfyRequest(in2) {
-			continue
-		}
-
-		respType := mustResponse(out0)
-
-		mustError(out1)
-
-		svcName, methodName := a.makeName(pointerType.Elem().Name(), method.Name)
-		action := reflectAction{
-			serviceName: svcName,
-			methodName:  methodName,
-			bindData:    reflect.New(in2).Interface(),
-			methodValue: pointerValue.Method(i),
-			respType:    respType,
-		}
-
-		actions = append(actions, action)
-	}
-
-	return actions
-}
-
-func (a *App) makeName(resource, action string) (string, string) {
-	lr := strings.ToLower(resource)
-
-	for _, s := range a.options.Suffixes {
-		if strings.HasSuffix(lr, s) {
-			lr = strings.ReplaceAll(lr, s, "")
-			break
-		}
-	}
-
-	return strcase.ToSnake(lr), strcase.ToSnake(action)
-}
-
 func (a *App) fillGroups(routerGroup *gin.RouterGroup, vg *internal.VersionGroup) {
 
 	for _, constructor := range vg.StableConstructors {
@@ -324,16 +194,16 @@ func (a *App) fillGroups(routerGroup *gin.RouterGroup, vg *internal.VersionGroup
 
 func (a *App) fillActions(g *gin.RouterGroup, constructor any) {
 
-	actions := a.makeActions(constructor)
+	actions := internal.MakeReflect(a.container, constructor, a.options.Suffixes)
 
 	for _, action := range actions {
 
-		g.POST(fmt.Sprintf("/%s/%s", action.serviceName, action.methodName), func(c *gin.Context) {
+		g.POST(fmt.Sprintf("/%s/%s", action.ServiceName, action.MethodName), func(c *gin.Context) {
 			if ok := a.handleInterceptors(c); !ok {
 				return
 			}
 
-			req := action.bindData
+			req := action.BindData
 			if err := c.ShouldBind(&req); err != nil {
 				c.AbortWithStatus(http.StatusBadRequest)
 				return
@@ -356,7 +226,7 @@ func (a *App) fillActions(g *gin.RouterGroup, constructor any) {
 
 			ctxValue := reflect.ValueOf(timeoutCtx)
 			reqValue := reflect.ValueOf(req).Elem()
-			rtnList := action.methodValue.Call([]reflect.Value{ctxValue, reqValue})
+			rtnList := action.MethodValue.Call([]reflect.Value{ctxValue, reqValue})
 
 			// 判断第二个值 是自定义错误
 			// 还是原生error
@@ -378,7 +248,7 @@ func (a *App) fillActions(g *gin.RouterGroup, constructor any) {
 			}
 
 			result := rtnList[0].Interface()
-			if action.respType == respTypeStream {
+			if action.RespType == internal.RespTypeStream {
 				file := result.(fs.File)
 				stat, err := file.Stat()
 				if err != nil {

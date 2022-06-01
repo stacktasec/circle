@@ -1,5 +1,10 @@
 package internal
 
+const (
+	RespTypeJson   = "json"
+	RespTypeStream = "stream"
+)
+
 type Request interface {
 	Validate() error
 }
