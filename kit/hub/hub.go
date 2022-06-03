@@ -16,8 +16,6 @@ type Session interface {
 
 type Hub interface {
 	OnUpgrade(fn http.HandlerFunc)
-	OnConnect(fn func(Session))
-	OnDisconnect(fn func(Session))
 	OnPong(fn func(Session))
 	OnMessage(fn func(Session, []byte))
 	OnError(fn func(Session, error))
