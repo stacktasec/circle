@@ -11,7 +11,7 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/stacktasec/circle/kit/app/internal"
-	"github.com/stacktasec/circle/kit/app/klog"
+	"github.com/stacktasec/circle/kit/klog"
 	"go.uber.org/dig"
 	"io/fs"
 	"net/http"
