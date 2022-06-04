@@ -16,6 +16,8 @@ type Session interface {
 
 type Hub interface {
 	Register(session Session) error
+	Unregister(session Session) error
+	Send(id string, msg []byte) error
 	Broadcast(fn func(Session) bool, msg []byte) error
 
 	OnUpgrade(fn http.HandlerFunc)
