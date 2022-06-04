@@ -11,8 +11,9 @@ import (
 	"github.com/shirou/gopsutil/v3/cpu"
 	"github.com/shirou/gopsutil/v3/mem"
 	"github.com/stacktasec/circle/kit/app/internal"
-	"github.com/stacktasec/circle/kit/klog"
-	"go.uber.org/dig"
+	"github.com/stacktasec/circle/kit/core/biz"
+	"github.com/stacktasec/circle/kit/core/ioc"
+	"github.com/stacktasec/circle/kit/core/klog"
 	"io/fs"
 	"net/http"
 	"reflect"
@@ -23,7 +24,7 @@ import (
 const keyRequestID = "X-Request-ID"
 
 type App struct {
-	container     *dig.Container
+	container     *ioc.Container
 	options       internal.Options
 	versionGroups map[int]*internal.VersionGroup
 	engine        *gin.Engine
@@ -41,11 +42,11 @@ func NewApp(opts ...internal.AppOption) *App {
 
 	o.Ensure()
 
-	return &App{container: dig.New(), options: *o, versionGroups: make(map[int]*internal.VersionGroup)}
+	return &App{container: ioc.NewContainer(), options: *o, versionGroups: make(map[int]*internal.VersionGroup)}
 }
 
 func (a *App) Provide(constructors ...any) {
-	internal.LoadConstructors(a.container, constructors...)
+	a.container.LoadConstructors(constructors...)
 }
 
 func (a *App) Map(groups ...*internal.VersionGroup) {
@@ -194,7 +195,8 @@ func (a *App) fillGroups(routerGroup *gin.RouterGroup, vg *internal.VersionGroup
 
 func (a *App) fillActions(g *gin.RouterGroup, constructor any) {
 
-	actions := internal.MakeReflect(a.container, constructor, a.options.Suffixes)
+	pointerValue := a.container.ResolveConstructor(constructor)
+	actions := internal.MakeReflect(pointerValue, a.options.Suffixes)
 
 	for _, action := range actions {
 
@@ -237,7 +239,7 @@ func (a *App) fillActions(g *gin.RouterGroup, constructor any) {
 					return
 				}
 
-				err, ok := errValue.(internal.KnownError)
+				err, ok := errValue.(biz.Error)
 				if ok {
 					c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err})
 					return

@@ -2,24 +2,9 @@ package internal
 
 import (
 	"context"
-	"go.uber.org/dig"
 	"io/fs"
 	"reflect"
-	"runtime"
-	"strings"
 )
-
-func LoadConstructors(container *dig.Container, constructors ...any) {
-	for _, c := range constructors {
-		VerifyConstructor(c)
-	}
-
-	for _, item := range constructors {
-		if err := container.Provide(item); err != nil {
-			panic(err)
-		}
-	}
-}
 
 func LoadGroups(versionGroups map[int]*VersionGroup, groups ...*VersionGroup) {
 	for _, g := range groups {
@@ -44,34 +29,8 @@ type ReflectAction struct {
 	RespType string
 }
 
-func MakeReflect(container *dig.Container, constructor any, suffixes []string) []ReflectAction {
+func MakeReflect(pointerValue reflect.Value, suffixes []string) []ReflectAction {
 
-	VerifyConstructor(constructor)
-
-	funcType := reflect.TypeOf(constructor)
-	funcValue := reflect.ValueOf(constructor)
-
-	numIn := funcType.NumIn()
-	var params []reflect.Type
-	for i := 0; i < numIn; i++ {
-		t := funcType.In(i)
-		params = append(params, reflect.New(t).Elem().Type())
-	}
-
-	var rtn any
-
-	invokerType := reflect.FuncOf(params, nil, false)
-	invokerValue := reflect.MakeFunc(invokerType, func(args []reflect.Value) (results []reflect.Value) {
-		rtnList := funcValue.Call(args)
-		rtn = rtnList[0].Interface()
-		return nil
-	})
-
-	if err := container.Invoke(invokerValue.Interface()); err != nil {
-		panic(err)
-	}
-
-	pointerValue := reflect.ValueOf(rtn)
 	pointerType := pointerValue.Type()
 
 	var actions []ReflectAction
@@ -157,42 +116,5 @@ func MustError(t reflect.Type) {
 	errType := reflect.TypeOf((*error)(nil)).Elem()
 	if !t.Implements(errType) {
 		panic("this position type must be error")
-	}
-}
-
-func VerifyConstructor(constructor any) {
-	// 只接受 函数
-	funcType := reflect.TypeOf(constructor)
-	if funcType.Kind() != reflect.Func {
-		panic("constructor must be func")
-	}
-
-	var funcName string
-	name := runtime.FuncForPC(reflect.ValueOf(constructor).Pointer()).Name()
-	arr := strings.Split(name, ".")
-	if len(arr) == 1 {
-		funcName = arr[0]
-	} else {
-		funcName = arr[len(arr)-1]
-	}
-
-	// 必须 New开头
-	if !strings.HasPrefix(funcName, "New") {
-		panic("constructor must start with New")
-	}
-
-	// 不能是可变函数
-	if funcType.IsVariadic() {
-		panic("do not accept variadic func")
-	}
-
-	// return值暂时只支持1个
-	if funcType.NumOut() != 1 {
-		panic("only support one return value")
-	}
-
-	// return值暂时支持1个
-	if funcType.Out(0).Kind() != reflect.Pointer && funcType.Out(0).Kind() != reflect.Interface {
-		panic("rtn value type must be pointer or interface")
 	}
 }

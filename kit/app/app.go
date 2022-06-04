@@ -27,13 +27,6 @@ func NewGroup(mainVersion int) *internal.VersionGroup {
 	}
 }
 
-func MakeKnownError(status, message string) error {
-	return internal.KnownError{
-		Status:  status,
-		Message: message,
-	}
-}
-
 func WithAddr(addr string) internal.AppOption {
 	return internal.OptionFunc(func(opts *internal.Options) {
 		opts.Addr = addr
