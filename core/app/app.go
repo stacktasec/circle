@@ -2,7 +2,6 @@ package app
 
 import (
 	"net/http"
-	"time"
 )
 
 type App interface {
@@ -68,12 +67,7 @@ func (opt optionFunc) apply(opts *options) {
 type options struct {
 	addr string
 
-	enableTLS bool
-	cert      string
-	key       string
-
-	baseURL    string
-	ctxTimeout time.Duration
+	baseURL string
 
 	idInterceptor   func(h http.Header) error
 	permInterceptor func(h http.Header) error
@@ -83,10 +77,6 @@ func (o *options) ensure() {
 	if o.addr == "" {
 		o.addr = ":8080"
 	}
-
-	if o.ctxTimeout == 0 {
-		o.ctxTimeout = time.Second * 30
-	}
 }
 
 func WithAddr(addr string) ServerOption {
@@ -95,23 +85,9 @@ func WithAddr(addr string) ServerOption {
 	})
 }
 
-func WithTLS(cert, key string) ServerOption {
-	return optionFunc(func(opts *options) {
-		opts.enableTLS = true
-		opts.cert = cert
-		opts.key = key
-	})
-}
-
 func WithBaseURL(url string) ServerOption {
 	return optionFunc(func(opts *options) {
 		opts.baseURL = url
-	})
-}
-
-func WithCtxTimeout(d time.Duration) ServerOption {
-	return optionFunc(func(opts *options) {
-		opts.ctxTimeout = d
 	})
 }
 

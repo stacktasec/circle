@@ -59,13 +59,6 @@ func (a *app) Run() {
 		MaxHeaderBytes: 1 << 16,
 	}
 
-	if a.options.enableTLS {
-		klog.Info("https server is listening on %s", a.options.addr)
-		if err := httpServer.ListenAndServeTLS(a.options.cert, a.options.key); err != nil {
-			panic(err)
-		}
-	}
-
 	klog.Info("http server is listening on %s", a.options.addr)
 	if err := httpServer.ListenAndServe(); err != nil {
 		panic(err)
@@ -156,12 +149,10 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 
 			reqID := uuid.NewString()
 			ctx = context.WithValue(ctx, keyRequestID, reqID)
-			timeoutCtx, cancel := context.WithTimeout(ctx, a.options.ctxTimeout)
-			defer cancel()
 
 			c.Writer.Header().Set(keyRequestID, reqID)
 
-			ctxValue := reflect.ValueOf(timeoutCtx)
+			ctxValue := reflect.ValueOf(ctx)
 			reqValue := reflect.ValueOf(req).Elem()
 			rtnList := action.MethodValue.Call([]reflect.Value{ctxValue, reqValue})
 
