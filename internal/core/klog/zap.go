@@ -24,7 +24,6 @@ func InitLogger(opts ...Option) {
 		LevelKey:      "level",
 		TimeKey:       "time",
 		CallerKey:     "caller",
-		FunctionKey:   "func",
 		StacktraceKey: "stacktrace",
 		EncodeLevel:   zapcore.LowercaseColorLevelEncoder,
 		EncodeTime:    zapcore.ISO8601TimeEncoder,

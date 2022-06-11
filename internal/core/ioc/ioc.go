@@ -3,8 +3,6 @@ package ioc
 import (
 	"go.uber.org/dig"
 	"reflect"
-	"runtime"
-	"strings"
 )
 
 type Container struct {
@@ -16,43 +14,26 @@ func NewContainer() *Container {
 }
 
 func (c *Container) MustConstructor(constructor any) {
-	// 只接受 函数
 	funcType := reflect.TypeOf(constructor)
 	if funcType.Kind() != reflect.Func {
 		panic("constructor must be func")
 	}
 
-	var funcName string
-	name := runtime.FuncForPC(reflect.ValueOf(constructor).Pointer()).Name()
-	arr := strings.Split(name, ".")
-	if len(arr) == 1 {
-		funcName = arr[0]
-	} else {
-		funcName = arr[len(arr)-1]
-	}
-
-	// 必须 New开头
-	if !strings.HasPrefix(funcName, "New") {
-		panic("constructor must start with New")
-	}
-
-	// 不能是可变函数
 	if funcType.IsVariadic() {
 		panic("do not accept variadic func")
 	}
 
-	// return值暂时只支持1个
 	if funcType.NumOut() != 1 {
 		panic("only support one return value")
 	}
 
-	// return值暂时支持1个
 	if funcType.Out(0).Kind() != reflect.Pointer && funcType.Out(0).Kind() != reflect.Interface {
 		panic("rtn value type must be pointer or interface")
 	}
 }
 
 func (c *Container) LoadConstructors(constructors ...any) {
+
 	for _, constructor := range constructors {
 		c.MustConstructor(constructor)
 	}
