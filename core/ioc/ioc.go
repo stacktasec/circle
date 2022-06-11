@@ -13,29 +13,10 @@ func NewContainer() *Container {
 	return &Container{container: dig.New()}
 }
 
-func (c *Container) MustConstructor(constructor any) {
-	funcType := reflect.TypeOf(constructor)
-	if funcType.Kind() != reflect.Func {
-		panic("constructor must be func")
-	}
-
-	if funcType.IsVariadic() {
-		panic("do not accept variadic func")
-	}
-
-	if funcType.NumOut() != 1 {
-		panic("only support one return value")
-	}
-
-	if funcType.Out(0).Kind() != reflect.Pointer && funcType.Out(0).Kind() != reflect.Interface {
-		panic("rtn value type must be pointer or interface")
-	}
-}
-
 func (c *Container) LoadConstructors(constructors ...any) {
 
 	for _, constructor := range constructors {
-		c.MustConstructor(constructor)
+		c.mustConstructor(constructor)
 	}
 
 	for _, item := range constructors {
@@ -44,7 +25,7 @@ func (c *Container) LoadConstructors(constructors ...any) {
 }
 
 func (c *Container) ResolveConstructor(constructor any) reflect.Value {
-	c.MustConstructor(constructor)
+	c.mustConstructor(constructor)
 
 	funcType := reflect.TypeOf(constructor)
 	funcValue := reflect.ValueOf(constructor)
@@ -68,4 +49,23 @@ func (c *Container) ResolveConstructor(constructor any) reflect.Value {
 	_ = c.container.Invoke(invokerValue.Interface())
 
 	return reflect.ValueOf(rtn)
+}
+
+func (c *Container) mustConstructor(constructor any) {
+	funcType := reflect.TypeOf(constructor)
+	if funcType.Kind() != reflect.Func {
+		panic("constructor must be func")
+	}
+
+	if funcType.IsVariadic() {
+		panic("do not accept variadic func")
+	}
+
+	if funcType.NumOut() != 1 {
+		panic("only support one return value")
+	}
+
+	if funcType.Out(0).Kind() != reflect.Pointer && funcType.Out(0).Kind() != reflect.Interface {
+		panic("rtn value type must be pointer or interface")
+	}
 }

@@ -5,7 +5,7 @@ import (
 )
 
 type App interface {
-	Provide(constructors ...any)
+	Load(constructors ...any)
 	Map(groups ...*versionGroup)
 	Run()
 }
@@ -54,7 +54,7 @@ func NewGroup(mainVersion int) *versionGroup {
 	}
 }
 
-type ServerOption interface {
+type Option interface {
 	apply(*options)
 }
 
@@ -79,25 +79,25 @@ func (o *options) ensure() {
 	}
 }
 
-func WithAddr(addr string) ServerOption {
+func WithAddr(addr string) Option {
 	return optionFunc(func(opts *options) {
 		opts.addr = addr
 	})
 }
 
-func WithBaseURL(url string) ServerOption {
+func WithBaseURL(url string) Option {
 	return optionFunc(func(opts *options) {
 		opts.baseURL = url
 	})
 }
 
-func WithIDInterceptor(i func(h http.Header) error) ServerOption {
+func WithIDInterceptor(i func(h http.Header) error) Option {
 	return optionFunc(func(opts *options) {
 		opts.idInterceptor = i
 	})
 }
 
-func WithPermInterceptor(p func(h http.Header) error) ServerOption {
+func WithPermInterceptor(p func(h http.Header) error) Option {
 	return optionFunc(func(opts *options) {
 		opts.permInterceptor = p
 	})

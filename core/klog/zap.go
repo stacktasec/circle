@@ -56,7 +56,7 @@ func convert(level string) zapcore.Level {
 	case LevelFatal:
 		return zapcore.FatalLevel
 	default:
-		panic("can not convert")
+		return zapcore.DebugLevel
 	}
 }
 

@@ -27,7 +27,7 @@ type app struct {
 	engine        *gin.Engine
 }
 
-func NewApp(opts ...ServerOption) *app {
+func NewApp(opts ...Option) *app {
 
 	o := &options{}
 
@@ -40,7 +40,7 @@ func NewApp(opts ...ServerOption) *app {
 	return &app{container: ioc.NewContainer(), options: *o, versionGroups: make(map[int]*versionGroup)}
 }
 
-func (a *app) Provide(constructors ...any) {
+func (a *app) Load(constructors ...any) {
 	a.container.LoadConstructors(constructors...)
 }
 

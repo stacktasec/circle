@@ -19,10 +19,10 @@ func (k knownError) Error() string {
 }
 
 func (k knownError) Is(err error) bool {
-	nErr, ok := err.(knownError)
+	knownErr, ok := err.(knownError)
 	if !ok {
 		return false
 	}
 
-	return k.Status == nErr.Status && k.Message == nErr.Message
+	return k.Status == knownErr.Status && k.Message == knownErr.Message
 }
