@@ -1,6 +1,8 @@
 package app
 
 import (
+	"circle/core/ioc"
+	"circle/core/klog"
 	"context"
 	"fmt"
 	"github.com/gin-contrib/cors"
@@ -8,8 +10,6 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/iancoleman/strcase"
-	"github.com/stacktasec/circle/internal/core/ioc"
-	"github.com/stacktasec/circle/internal/core/klog"
 	"io/fs"
 	"net/http"
 	"reflect"
