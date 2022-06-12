@@ -245,9 +245,9 @@ func makeReflect(pointerValue reflect.Value) []reflectAction {
 	svcName := strcase.ToSnake(strings.ReplaceAll(rawSvcName, suffixService, ""))
 
 	var anonymous bool
-	annotations := reflect.TypeOf((*Annotations)(nil)).Elem()
+	annotations := reflect.TypeOf((*AttributeAnonymous)(nil)).Elem()
 	if pointerType.Implements(annotations) {
-		impl := pointerValue.Interface().(Annotations)
+		impl := pointerValue.Interface().(AttributeAnonymous)
 		anonymous = impl.Anonymous()
 	}
 

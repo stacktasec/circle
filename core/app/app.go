@@ -21,7 +21,7 @@ type Request interface {
 	Validate() error
 }
 
-type Annotations interface {
+type AttributeAnonymous interface {
 	Anonymous() bool
 }
 
