@@ -21,7 +21,11 @@ type Request interface {
 	Validate() error
 }
 
-type AttributeAnonymous interface {
+type OmittedAttribute interface {
+	Omitted() bool
+}
+
+type AnonymousAttribute interface {
 	Anonymous() bool
 }
 

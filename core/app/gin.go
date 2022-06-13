@@ -119,7 +119,7 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 	for _, action := range actions {
 
 		var route string
-		if action.Anonymous {
+		if action.Omitted {
 			route = action.MethodName
 		} else {
 			route = fmt.Sprintf("/%s/%s", action.ServiceName, action.MethodName)
@@ -128,8 +128,19 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 		g.POST(route, func(c *gin.Context) {
 
 			if !action.Anonymous {
-				if ok := a.handleInterceptors(c); !ok {
-					return
+				h := c.Request.Header
+				if a.options.idInterceptor != nil {
+					if err := a.options.idInterceptor(h); err != nil {
+						c.AbortWithStatus(http.StatusUnauthorized)
+						return
+					}
+
+					if a.options.permInterceptor != nil {
+						if err := a.options.permInterceptor(h); err != nil {
+							c.AbortWithStatus(http.StatusForbidden)
+							return
+						}
+					}
 				}
 			}
 
@@ -195,26 +206,6 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 	}
 }
 
-func (a *app) handleInterceptors(c *gin.Context) bool {
-	h := c.Request.Header
-
-	if a.options.idInterceptor != nil {
-		if err := a.options.idInterceptor(h); err != nil {
-			c.AbortWithStatus(http.StatusUnauthorized)
-			return false
-		}
-
-		if a.options.permInterceptor != nil {
-			if err := a.options.permInterceptor(h); err != nil {
-				c.AbortWithStatus(http.StatusForbidden)
-				return false
-			}
-		}
-	}
-
-	return true
-}
-
 func loadGroups(versionGroups map[int]*versionGroup, groups ...*versionGroup) {
 	for _, g := range groups {
 		_, ok := versionGroups[g.mainVersion]
@@ -228,6 +219,7 @@ func loadGroups(versionGroups map[int]*versionGroup, groups ...*versionGroup) {
 type reflectAction struct {
 	ServiceName string
 	MethodName  string
+	Omitted     bool
 	Anonymous   bool
 	BindData    any
 	MethodValue reflect.Value
@@ -244,10 +236,17 @@ func makeReflect(pointerValue reflect.Value) []reflectAction {
 	}
 	svcName := strcase.ToSnake(strings.ReplaceAll(rawSvcName, suffixService, ""))
 
+	var omitted bool
+	omittedAttribute := reflect.TypeOf((*OmittedAttribute)(nil)).Elem()
+	if pointerType.Implements(omittedAttribute) {
+		impl := pointerValue.Interface().(OmittedAttribute)
+		omitted = impl.Omitted()
+	}
+
 	var anonymous bool
-	annotations := reflect.TypeOf((*AttributeAnonymous)(nil)).Elem()
-	if pointerType.Implements(annotations) {
-		impl := pointerValue.Interface().(AttributeAnonymous)
+	anonymousAttribute := reflect.TypeOf((*AnonymousAttribute)(nil)).Elem()
+	if pointerType.Implements(anonymousAttribute) {
+		impl := pointerValue.Interface().(AnonymousAttribute)
 		anonymous = impl.Anonymous()
 	}
 
@@ -288,6 +287,7 @@ func makeReflect(pointerValue reflect.Value) []reflectAction {
 			ServiceName: svcName,
 			MethodName:  methodName,
 			Anonymous:   anonymous,
+			Omitted:     omitted,
 			BindData:    reflect.New(in2).Interface(),
 			MethodValue: pointerValue.Method(i),
 			RespType:    respType,
