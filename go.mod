@@ -1,4 +1,4 @@
-module circle
+module github.com/stacktasec/circle
 
 go 1.18
 

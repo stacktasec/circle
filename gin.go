@@ -1,8 +1,6 @@
 package circle
 
 import (
-	"circle/ioc"
-	"circle/klog"
 	"context"
 	"fmt"
 	"github.com/gin-contrib/cors"
@@ -10,6 +8,8 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/google/uuid"
 	"github.com/iancoleman/strcase"
+	"github.com/stacktasec/circle/ioc"
+	"github.com/stacktasec/circle/klog"
 	"io/fs"
 	"net/http"
 	"reflect"
