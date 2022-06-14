@@ -2,7 +2,6 @@ package app
 
 import (
 	"circle/core/ioc"
-	"circle/core/klog"
 	"context"
 	"fmt"
 	"github.com/gin-contrib/cors"
@@ -59,7 +58,7 @@ func (a *app) Run() {
 		MaxHeaderBytes: 1 << 16,
 	}
 
-	klog.Info("http server is listening on %s", a.options.addr)
+	fmt.Println("http server is listening on " + a.options.addr)
 	if err := httpServer.ListenAndServe(); err != nil {
 		panic(err)
 	}
