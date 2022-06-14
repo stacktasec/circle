@@ -1,4 +1,4 @@
-package circle
+package app
 
 import (
 	"context"
@@ -94,7 +94,7 @@ func (a *app) build() {
 
 func (a *app) discovery(r *gin.Engine) {
 	r.GET("/", func(c *gin.Context) {
-		c.String(http.StatusOK, "You Guys Found Me")
+		c.String(http.StatusOK, "You guys found out")
 	})
 }
 
@@ -183,7 +183,7 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 					return
 				}
 
-				if err, ok := errValue.(knownError); ok {
+				if err, ok := errValue.(internalError); ok {
 					c.AbortWithStatusJSON(http.StatusConflict, gin.H{"error": err})
 					return
 				} else {

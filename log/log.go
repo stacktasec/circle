@@ -1,4 +1,4 @@
-package klog
+package log
 
 import (
 	"fmt"
@@ -6,8 +6,10 @@ import (
 	"go.uber.org/zap/zapcore"
 )
 
-type zapLogger struct {
-	logger *zap.Logger
+var logger *zap.Logger
+
+func init() {
+	InitLogger()
 }
 
 func InitLogger(opts ...Option) {
@@ -31,60 +33,41 @@ func InitLogger(opts ...Option) {
 	}
 
 	config := zap.Config{
-		Level:            zap.NewAtomicLevelAt(convert(o.level)),
+		Level:            zap.NewAtomicLevelAt(*o.level),
 		Encoding:         "console",
 		EncoderConfig:    encoderConfig,
 		OutputPaths:      []string{"stdout"},
 		ErrorOutputPaths: []string{"stderr"},
 	}
 
-	l, _ := config.Build(zap.AddCallerSkip(2))
-
-	logger = &zapLogger{logger: l}
+	logger, _ = config.Build(zap.AddCallerSkip(2))
 }
 
-func convert(level string) zapcore.Level {
-	switch level {
-	case LevelDebug:
-		return zapcore.DebugLevel
-	case LevelInfo:
-		return zapcore.InfoLevel
-	case LevelWarn:
-		return zapcore.WarnLevel
-	case LevelError:
-		return zapcore.ErrorLevel
-	case LevelFatal:
-		return zapcore.FatalLevel
-	default:
-		return zapcore.DebugLevel
-	}
-}
-
-func (z *zapLogger) Debug(format any, a ...any) {
+func Debug(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
-	z.logger.Debug(msg)
+	logger.Debug(msg)
 }
 
-func (z *zapLogger) Info(format any, a ...any) {
+func Info(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
-	z.logger.Info(msg)
+	logger.Info(msg)
 }
 
-func (z *zapLogger) Warn(format any, a ...any) {
+func Warn(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
-	z.logger.Warn(msg)
+	logger.Warn(msg)
 }
 
-func (z *zapLogger) Error(format any, a ...any) {
+func Error(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
-	z.logger.Error(msg)
+	logger.Error(msg)
 }
 
-func (z *zapLogger) Fatal(format any, a ...any) {
+func Fatal(format any, a ...any) {
 	msg := fmt.Sprintf(fmt.Sprintf("%+v", format), a...)
-	z.logger.Fatal(msg)
+	logger.Fatal(msg)
 }
 
-func (z *zapLogger) Sync() error {
-	return z.logger.Sync()
+func SyncLogger() error {
+	return logger.Sync()
 }
