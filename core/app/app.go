@@ -10,8 +10,6 @@ type App interface {
 	Run()
 }
 
-var _ App = (*app)(nil)
-
 const (
 	respTypeJson = "json"
 	respTypeFile = "file"

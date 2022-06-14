@@ -27,7 +27,7 @@ type app struct {
 	engine        *gin.Engine
 }
 
-func NewApp(opts ...Option) *app {
+func NewApp(opts ...Option) App {
 
 	o := &options{}
 
