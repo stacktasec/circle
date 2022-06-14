@@ -1,6 +1,7 @@
 package ioc
 
 import (
+	"errors"
 	"go.uber.org/dig"
 	"reflect"
 )
@@ -13,19 +14,28 @@ func NewContainer() *Container {
 	return &Container{container: dig.New()}
 }
 
-func (c *Container) LoadConstructors(constructors ...any) {
+func (c *Container) LoadConstructors(constructors ...any) error {
 
 	for _, constructor := range constructors {
-		c.mustConstructor(constructor)
+		if err := c.validateConstructor(constructor); err != nil {
+			return err
+		}
 	}
 
 	for _, item := range constructors {
-		_ = c.container.Provide(item)
+		if err := c.container.Provide(item); err != nil {
+			return err
+		}
 	}
+
+	return nil
 }
 
-func (c *Container) ResolveConstructor(constructor any) reflect.Value {
-	c.mustConstructor(constructor)
+func (c *Container) ResolveConstructor(constructor any) (*reflect.Value, error) {
+
+	if err := c.validateConstructor(constructor); err != nil {
+		return nil, err
+	}
 
 	funcType := reflect.TypeOf(constructor)
 	funcValue := reflect.ValueOf(constructor)
@@ -46,26 +56,32 @@ func (c *Container) ResolveConstructor(constructor any) reflect.Value {
 		return nil
 	})
 
-	_ = c.container.Invoke(invokerValue.Interface())
+	if err := c.container.Invoke(invokerValue.Interface()); err != nil {
+		return nil, err
+	}
 
-	return reflect.ValueOf(rtn)
+	value := reflect.ValueOf(rtn)
+	return &value, nil
 }
 
-func (c *Container) mustConstructor(constructor any) {
+func (c *Container) validateConstructor(constructor any) error {
 	funcType := reflect.TypeOf(constructor)
 	if funcType.Kind() != reflect.Func {
-		panic("constructor must be func")
+		return errors.New("constructor must be func")
 	}
 
 	if funcType.IsVariadic() {
-		panic("do not accept variadic func")
+		return errors.New("do not accept variadic func")
 	}
 
 	if funcType.NumOut() != 1 {
-		panic("only support one return value")
+		return errors.New("only support one return value")
 	}
 
-	if funcType.Out(0).Kind() != reflect.Pointer && funcType.Out(0).Kind() != reflect.Interface {
-		panic("rtn value type must be pointer or interface")
+	outKind := funcType.Out(0).Kind()
+	if outKind != reflect.Pointer && outKind != reflect.Interface {
+		return errors.New("rtn value type must be pointer or interface")
 	}
+
+	return nil
 }

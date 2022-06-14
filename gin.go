@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/iancoleman/strcase"
 	"github.com/stacktasec/circle/ioc"
-	"github.com/stacktasec/circle/klog"
 	"io/fs"
 	"net/http"
 	"reflect"
@@ -41,11 +40,19 @@ func NewApp(opts ...Option) App {
 }
 
 func (a *app) Load(constructors ...any) {
-	a.container.LoadConstructors(constructors...)
+	if err := a.container.LoadConstructors(constructors...); err != nil {
+		panic(err)
+	}
 }
 
 func (a *app) Map(groups ...*versionGroup) {
-	loadGroups(a.versionGroups, groups...)
+	for _, g := range groups {
+		_, ok := a.versionGroups[g.mainVersion]
+		if ok {
+			panic("duplicated main version")
+		}
+		a.versionGroups[g.mainVersion] = g
+	}
 }
 
 func (a *app) Run() {
@@ -59,7 +66,6 @@ func (a *app) Run() {
 		MaxHeaderBytes: 1 << 16,
 	}
 
-	klog.Info("http server is listening on %s", a.options.addr)
 	if err := httpServer.ListenAndServe(); err != nil {
 		panic(err)
 	}
@@ -112,9 +118,12 @@ func (a *app) fillGroups(routerGroup *gin.RouterGroup, vg *versionGroup) {
 
 func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 
-	pointerValue := a.container.ResolveConstructor(constructor)
+	pointerValue, err := a.container.ResolveConstructor(constructor)
+	if err != nil {
+		panic(err)
+	}
 
-	actions := makeReflect(pointerValue)
+	actions := makeReflect(*pointerValue)
 
 	for _, action := range actions {
 
@@ -203,16 +212,6 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 			}
 			c.JSON(http.StatusOK, gin.H{"result": result})
 		})
-	}
-}
-
-func loadGroups(versionGroups map[int]*versionGroup, groups ...*versionGroup) {
-	for _, g := range groups {
-		_, ok := versionGroups[g.mainVersion]
-		if ok {
-			panic("duplicated main version")
-		}
-		versionGroups[g.mainVersion] = g
 	}
 }
 
