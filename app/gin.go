@@ -15,6 +15,7 @@ import (
 
 const suffixService = "Service"
 const keyRequestID = "X-Request-ID"
+const ctxKeyID = "id"
 
 type app struct {
 	container     *ioc.Container
@@ -124,20 +125,29 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 
 	for _, action := range actions {
 
-		var route string
+		var path string
 		if action.Omitted {
-			route = action.MethodName
+			path = action.MethodName
 		} else {
-			route = fmt.Sprintf("/%s/%s", action.ServiceName, action.MethodName)
+			path = fmt.Sprintf("/%s/%s", action.ServiceName, action.MethodName)
 		}
 
-		g.POST(route, func(c *gin.Context) {
+		g.POST(path, func(c *gin.Context) {
 
 			if !action.Anonymous {
-				if err := a.options.authentication(c.Request.Header); err != nil {
+				userPayload, err := a.options.authentication(c.Request.Header)
+				if err != nil {
 					c.AbortWithStatus(http.StatusUnauthorized)
 					return
 				}
+
+				fullRoute := a.options.baseURL + g.BasePath() + path
+				if err := a.options.authorization(userPayload.UserRole, fullRoute); err != nil {
+					c.AbortWithStatus(http.StatusForbidden)
+					return
+				}
+
+				c.Set(ctxKeyID, userPayload)
 			}
 
 			req := action.BindData
