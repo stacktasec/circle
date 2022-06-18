@@ -10,11 +10,6 @@ type App interface {
 	Run()
 }
 
-const (
-	respTypeJson = "json"
-	respTypeFile = "file"
-)
-
 type Request interface {
 	Validate() error
 }

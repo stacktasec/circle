@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 	"github.com/iancoleman/strcase"
 	"github.com/stacktasec/circle/ioc"
-	"io/fs"
 	"net/http"
 	"reflect"
 	"strings"
@@ -154,7 +153,7 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 			}
 
 			req := action.BindData
-			if err := c.ShouldBind(&req); err != nil {
+			if err := c.ShouldBindJSON(&req); err != nil {
 				c.AbortWithStatus(http.StatusBadRequest)
 				return
 			}
@@ -193,17 +192,6 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 			}
 
 			result := rtnList[0].Interface()
-			if action.RespType == respTypeFile {
-				file := result.(fs.File)
-				stat, err := file.Stat()
-				if err != nil {
-					c.AbortWithStatus(http.StatusInternalServerError)
-					return
-				}
-
-				c.DataFromReader(http.StatusOK, stat.Size(), "application/octet-stream", file, nil)
-				return
-			}
 
 			if result == nil {
 				c.Status(http.StatusNotFound)
@@ -221,7 +209,6 @@ type reflectAction struct {
 	Anonymous   bool
 	BindData    any
 	MethodValue reflect.Value
-	RespType    string
 }
 
 func makeReflect(pointerValue reflect.Value) []reflectAction {
@@ -276,7 +263,7 @@ func makeReflect(pointerValue reflect.Value) []reflectAction {
 			continue
 		}
 
-		respType := mustResponse(out0)
+		mustResponse(out0)
 
 		mustError(out1)
 
@@ -288,7 +275,6 @@ func makeReflect(pointerValue reflect.Value) []reflectAction {
 			Omitted:     omitted,
 			BindData:    reflect.New(in2).Interface(),
 			MethodValue: pointerValue.Method(i),
-			RespType:    respType,
 		}
 
 		actions = append(actions, action)
@@ -308,17 +294,10 @@ func satisfyRequest(t reflect.Type) bool {
 	return pt.Implements(reqType)
 }
 
-func mustResponse(t reflect.Type) string {
+func mustResponse(t reflect.Type) {
 	if t.Kind() != reflect.Pointer || t.Elem().Kind() != reflect.Struct {
 		panic("this position type must be a pointer of struct")
 	}
-
-	streamType := reflect.TypeOf((*fs.File)(nil)).Elem()
-	if t.Implements(streamType) {
-		return respTypeFile
-	}
-
-	return respTypeJson
 }
 
 func mustError(t reflect.Type) {
