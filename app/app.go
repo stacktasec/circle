@@ -1,7 +1,8 @@
 package app
 
 import (
-	"net/http"
+	"crypto/rsa"
+	"time"
 )
 
 type App interface {
@@ -66,8 +67,8 @@ type options struct {
 
 	baseURL string
 
-	idInterceptor       func(h http.Header) error
-	funcPermInterceptor func(h http.Header) error
+	keyFunc  func() *rsa.PublicKey
+	timeFunc func() time.Time
 }
 
 func (o *options) ensure() {
@@ -88,18 +89,9 @@ func WithBaseURL(url string) Option {
 	})
 }
 
-// TODO 直接使用内建JWT 传入Key Generator 动态解析确定身份
-func WithIDInterceptor(i func(h http.Header) error) Option {
+func WithAuthentication(keyFunc func() *rsa.PublicKey, timeFunc func() time.Time) Option {
 	return optionFunc(func(opts *options) {
-		opts.idInterceptor = i
+		opts.keyFunc = keyFunc
+		opts.timeFunc = timeFunc
 	})
 }
-
-// TODO 这里直接使用内建JWT得到的身份的Claim里的角色结合 路由进行判断
-func WithFuncPermInterceptor(p func(h http.Header) error) Option {
-	return optionFunc(func(opts *options) {
-		opts.funcPermInterceptor = p
-	})
-}
-
-// TODO 数据权限 使用传入的回调枚举函数
