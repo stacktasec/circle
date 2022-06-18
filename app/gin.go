@@ -141,22 +141,26 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 
 		g.POST(path, func(c *gin.Context) {
 
-			var userPayload UserPayload
 			if !action.Anonymous {
+
+				if a.options.authentication == nil || a.options.authorization == nil {
+					c.AbortWithStatus(http.StatusServiceUnavailable)
+					return
+				}
+
 				payload, err := a.options.authentication(c.Request.Header)
 				if err != nil {
 					c.AbortWithStatus(http.StatusUnauthorized)
 					return
 				}
 
-				fullRoute := a.options.baseURL + g.BasePath() + path
-				if err := a.options.authorization(payload.UserRole(), fullRoute); err != nil {
+				fullRoute := g.BasePath() + path
+				if err := a.options.authorization(payload, fullRoute); err != nil {
 					c.AbortWithStatus(http.StatusForbidden)
 					return
 				}
 
 				c.Set(ctxKeyID, payload)
-				userPayload = payload
 			}
 
 			req := action.BindData
@@ -179,39 +183,6 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 
 			ctxValue := reflect.ValueOf(ctx)
 			reqValue := reflect.ValueOf(req).Elem()
-
-			if action.DataPerm {
-
-				dp := req.(DataPermAttribute)
-				dataPermField := dp.PermField()
-
-				if userPayload != nil && a.options.dataPermFilter != nil && dataPermField != "" {
-					items, err := a.options.dataPermFilter(userPayload.UserID(), dataPermField)
-					if err != nil {
-						c.AbortWithStatus(http.StatusInternalServerError)
-						return
-					}
-
-					field := reqValue.FieldByName(dataPermField)
-					fieldData := field.Interface()
-
-					str, ok := fieldData.(string)
-					if ok {
-						if !stringInStrings(str, items) {
-							c.AbortWithStatus(http.StatusNotFound)
-							return
-						}
-					} else {
-						list, ok := fieldData.([]string)
-						if !ok {
-							c.AbortWithStatus(http.StatusInternalServerError)
-							return
-						}
-						filtered := stringsIntersection(list, items)
-						field.Set(reflect.ValueOf(filtered))
-					}
-				}
-			}
 
 			rtnList := action.MethodValue.Call([]reflect.Value{ctxValue, reqValue})
 
@@ -240,31 +211,4 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 			c.JSON(http.StatusOK, gin.H{"result": result})
 		})
 	}
-}
-
-func stringInStrings(str string, list []string) bool {
-	for _, item := range list {
-		if str == item {
-			return true
-		}
-	}
-	return false
-}
-
-func stringsIntersection(input, allowed []string) []string {
-	m := make(map[string]struct{})
-
-	for _, item := range input {
-		m[item] = struct{}{}
-	}
-
-	var output []string
-	for _, item := range allowed {
-		_, ok := m[item]
-		if ok {
-			output = append(output, item)
-		}
-	}
-
-	return output
 }

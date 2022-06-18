@@ -13,7 +13,6 @@ type reflectAction struct {
 	MethodName  string
 	Omitted     bool
 	Anonymous   bool
-	DataPerm    bool
 	BindData    any
 	MethodValue reflect.Value
 }
@@ -66,15 +65,12 @@ func makeReflect(pointerValue reflect.Value) []reflectAction {
 			panic(err)
 		}
 
-		isPerm := isDataPerm(in2)
-
 		methodName := strcase.ToSnake(method.Name)
 		action := reflectAction{
 			ServiceName: svcName,
 			MethodName:  methodName,
 			Omitted:     omitted,
 			Anonymous:   anonymous,
-			DataPerm:    isPerm,
 			BindData:    reflect.New(in2).Interface(),
 			MethodValue: pointerValue.Method(i),
 		}
@@ -89,7 +85,6 @@ func validateAction(t1, t2, t3, t4 reflect.Type) error {
 	if err := validateContext(t1); err != nil {
 		return err
 	}
-
 	if err := validateRequest(t2); err != nil {
 		return err
 	}
@@ -132,10 +127,4 @@ func validateError(t reflect.Type) error {
 		return errors.New("this position type must be error")
 	}
 	return nil
-}
-
-func isDataPerm(t reflect.Type) bool {
-	pt := reflect.New(t).Type()
-	reqType := reflect.TypeOf((*DataPermAttribute)(nil)).Elem()
-	return pt.Implements(reqType)
 }
