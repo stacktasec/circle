@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"errors"
 	"github.com/iancoleman/strcase"
 	"reflect"
 	"strings"
@@ -52,7 +53,7 @@ func makeReflect(pointerValue reflect.Value) []reflectAction {
 		inParams := methodType.NumIn()
 		outParams := methodType.NumOut()
 		if inParams != 3 || outParams != 2 {
-			continue
+			panic("exported method must be action")
 		}
 
 		in1 := methodType.In(1)
@@ -60,17 +61,9 @@ func makeReflect(pointerValue reflect.Value) []reflectAction {
 		out0 := methodType.Out(0)
 		out1 := methodType.Out(1)
 
-		if !satisfyContext(in1) {
-			continue
+		if err := validateAction(in1, in2, out0, out1); err != nil {
+			panic(err)
 		}
-
-		if !satisfyRequest(in2) {
-			continue
-		}
-
-		mustResponse(out0)
-
-		mustError(out1)
 
 		methodName := strcase.ToSnake(method.Name)
 		action := reflectAction{
@@ -88,26 +81,51 @@ func makeReflect(pointerValue reflect.Value) []reflectAction {
 	return actions
 }
 
-func satisfyContext(t reflect.Type) bool {
-	ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
-	return t.AssignableTo(ctxType)
+func validateAction(t1, t2, t3, t4 reflect.Type) error {
+	if err := validateContext(t1); err != nil {
+		return err
+	}
+
+	if err := validateRequest(t2); err != nil {
+		return err
+	}
+	if err := validateResponse(t3); err != nil {
+		return err
+	}
+	if err := validateError(t4); err != nil {
+		return err
+	}
+	return nil
 }
 
-func satisfyRequest(t reflect.Type) bool {
+func validateContext(t reflect.Type) error {
+	ctxType := reflect.TypeOf((*context.Context)(nil)).Elem()
+	if !t.AssignableTo(ctxType) {
+		return errors.New("this position type must be context.Context")
+	}
+	return nil
+}
+
+func validateRequest(t reflect.Type) error {
 	pt := reflect.New(t).Type()
 	reqType := reflect.TypeOf((*Request)(nil)).Elem()
-	return pt.Implements(reqType)
-}
-
-func mustResponse(t reflect.Type) {
-	if t.Kind() != reflect.Pointer || t.Elem().Kind() != reflect.Struct {
-		panic("this position type must be a pointer of struct")
+	if !pt.Implements(reqType) {
+		return errors.New("this position type must impl Request")
 	}
+	return nil
 }
 
-func mustError(t reflect.Type) {
+func validateResponse(t reflect.Type) error {
+	if t.Kind() != reflect.Pointer || t.Elem().Kind() != reflect.Struct {
+		return errors.New("this position type must be a pointer of struct")
+	}
+	return nil
+}
+
+func validateError(t reflect.Type) error {
 	errType := reflect.TypeOf((*error)(nil)).Elem()
 	if !t.Implements(errType) {
-		panic("this position type must be error")
+		return errors.New("this position type must be error")
 	}
+	return nil
 }
