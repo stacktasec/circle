@@ -14,6 +14,10 @@ type Request interface {
 	Validate() error
 }
 
+type DataPermAttribute interface {
+	PermField() string
+}
+
 type OmittedAttribute interface {
 	Omitted() bool
 }
@@ -66,8 +70,9 @@ type options struct {
 
 	baseURL string
 
-	authentication func(header http.Header) (*UserPayload, error)
+	authentication func(header http.Header) (UserPayload, error)
 	authorization  func(role, route string) error
+	dataPermFilter func(userId, field string) ([]string, error)
 }
 
 func (o *options) ensure() {
@@ -88,7 +93,7 @@ func WithBaseURL(url string) Option {
 	})
 }
 
-func WithAuthentication(f func(header http.Header) (*UserPayload, error)) Option {
+func WithAuthentication(f func(header http.Header) (UserPayload, error)) Option {
 	return optionFunc(func(opts *options) {
 		opts.authentication = f
 	})
@@ -97,5 +102,11 @@ func WithAuthentication(f func(header http.Header) (*UserPayload, error)) Option
 func WithAuthorization(f func(role, route string) error) Option {
 	return optionFunc(func(opts *options) {
 		opts.authorization = f
+	})
+}
+
+func WithDataPermFilter(f func(userId, field string) ([]string, error)) Option {
+	return optionFunc(func(opts *options) {
+		opts.dataPermFilter = f
 	})
 }

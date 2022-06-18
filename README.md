@@ -13,7 +13,7 @@ Header 放在Context里面，
 加上return 字段名以及该有的数据权限枚举值字符串
 然后调用预先注入的函数
 
-若是List All Enum型的，过滤掉无权限的Enum
+若是List All Enum型的，直接写业务逻辑即可
 若是传入Enums型的，得到对应数据的，过滤掉无权限的Enum
 若是Enum型的，过滤掉无权限的Enum，可直接404
 直接拦截修改Request变量。
