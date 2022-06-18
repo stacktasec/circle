@@ -71,8 +71,8 @@ type options struct {
 
 	baseURL string
 
-	idInterceptor   func(h http.Header) error
-	permInterceptor func(h http.Header) error
+	idInterceptor       func(h http.Header) error
+	funcPermInterceptor func(h http.Header) error
 }
 
 func (o *options) ensure() {
@@ -99,8 +99,8 @@ func WithIDInterceptor(i func(h http.Header) error) Option {
 	})
 }
 
-func WithPermInterceptor(p func(h http.Header) error) Option {
+func WithFuncPermInterceptor(p func(h http.Header) error) Option {
 	return optionFunc(func(opts *options) {
-		opts.permInterceptor = p
+		opts.funcPermInterceptor = p
 	})
 }

@@ -144,8 +144,8 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 						return
 					}
 
-					if a.options.permInterceptor != nil {
-						if err := a.options.permInterceptor(h); err != nil {
+					if a.options.funcPermInterceptor != nil {
+						if err := a.options.funcPermInterceptor(h); err != nil {
 							c.AbortWithStatus(http.StatusForbidden)
 							return
 						}
