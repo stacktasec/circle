@@ -2,12 +2,10 @@ package app
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
-	"github.com/golang-jwt/jwt/v4"
 	"github.com/google/uuid"
 	"github.com/stacktasec/circle/ioc"
 	"net/http"
@@ -136,7 +134,7 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 		g.POST(route, func(c *gin.Context) {
 
 			if !action.Anonymous {
-				if err := a.authenticate(c.Request.Header); err != nil {
+				if err := a.options.authentication(c.Request.Header); err != nil {
 					c.AbortWithStatus(http.StatusUnauthorized)
 					return
 				}
@@ -190,36 +188,4 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 			c.JSON(http.StatusOK, gin.H{"result": result})
 		})
 	}
-}
-
-func (a *app) authenticate(h http.Header) error {
-
-	arr, ok := h["Authorization"]
-	if !ok {
-		return errors.New("no Authorization in header")
-	}
-
-	if len(arr) == 0 {
-		return errors.New("field Authorization has no value")
-	}
-
-	tokenStr := arr[0]
-
-	token, err := jwt.ParseWithClaims(tokenStr, &JwtClaims{}, func(token *jwt.Token) (any, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodRSA); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-
-		return a.options.keyFunc(), nil
-	})
-	claims, ok := token.Claims.(*JwtClaims)
-	if !ok || !token.Valid {
-		return err
-	}
-
-	if a.options.timeFunc().Unix() > claims.ExpiresAt.Time.Unix() {
-		return errors.New("jwt expired")
-	}
-
-	return nil
 }

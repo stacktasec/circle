@@ -1,8 +1,7 @@
 package app
 
 import (
-	"crypto/rsa"
-	"time"
+	"net/http"
 )
 
 type App interface {
@@ -67,8 +66,7 @@ type options struct {
 
 	baseURL string
 
-	keyFunc  func() *rsa.PublicKey
-	timeFunc func() time.Time
+	authentication func(header http.Header) error
 }
 
 func (o *options) ensure() {
@@ -89,9 +87,8 @@ func WithBaseURL(url string) Option {
 	})
 }
 
-func WithAuthentication(keyFunc func() *rsa.PublicKey, timeFunc func() time.Time) Option {
+func WithAuthentication(f func(header http.Header) error) Option {
 	return optionFunc(func(opts *options) {
-		opts.keyFunc = keyFunc
-		opts.timeFunc = timeFunc
+		opts.authentication = f
 	})
 }
