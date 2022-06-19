@@ -6,7 +6,6 @@ import (
 	"github.com/gin-contrib/cors"
 	"github.com/gin-contrib/gzip"
 	"github.com/gin-gonic/gin"
-	"github.com/google/uuid"
 	"github.com/stacktasec/circle/ioc"
 	"net/http"
 	"reflect"
@@ -15,7 +14,6 @@ import (
 
 const (
 	suffixService = "Service"
-	keyRequestID  = "X-Request-ID"
 	ctxKeyID      = "id"
 )
 
@@ -175,10 +173,6 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 			}
 
 			ctx := context.Background()
-
-			reqID := uuid.NewString()
-			ctx = context.WithValue(ctx, keyRequestID, reqID)
-			c.Writer.Header().Set(keyRequestID, reqID)
 
 			ctxValue := reflect.ValueOf(ctx)
 			reqValue := reflect.ValueOf(req).Elem()

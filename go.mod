@@ -6,7 +6,6 @@ require (
 	github.com/gin-contrib/cors v1.3.1
 	github.com/gin-contrib/gzip v0.0.5
 	github.com/gin-gonic/gin v1.8.1
-	github.com/google/uuid v1.3.0
 	github.com/iancoleman/strcase v0.2.0
 	go.uber.org/dig v1.14.1
 	go.uber.org/zap v1.21.0
