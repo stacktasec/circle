@@ -143,19 +143,19 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 
 			if !action.Anonymous {
 
-				if a.options.authentication == nil || a.options.authorization == nil {
+				if a.options.authenticator == nil || a.options.authorizer == nil {
 					c.AbortWithStatus(http.StatusServiceUnavailable)
 					return
 				}
 
-				payload, err := a.options.authentication(c.Request.Header)
+				payload, err := a.options.authenticator(c.Request.Header)
 				if err != nil {
 					c.AbortWithStatus(http.StatusUnauthorized)
 					return
 				}
 
 				fullRoute := g.BasePath() + path
-				if err := a.options.authorization(payload, fullRoute); err != nil {
+				if err := a.options.authorizer(payload, fullRoute); err != nil {
 					c.AbortWithStatus(http.StatusForbidden)
 					return
 				}
