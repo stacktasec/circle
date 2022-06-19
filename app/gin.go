@@ -154,8 +154,7 @@ func (a *app) fillActions(g *gin.RouterGroup, constructor any) {
 					return
 				}
 
-				fullRoute := g.BasePath() + path
-				if err := a.options.authorizer(payload, fullRoute); err != nil {
+				if err := a.options.authorizer(payload, c.Request.URL.Path); err != nil {
 					c.AbortWithStatus(http.StatusForbidden)
 					return
 				}

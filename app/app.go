@@ -66,8 +66,8 @@ type options struct {
 
 	baseURL string
 
-	authenticator func(header http.Header) (UserPayload, error)
-	authorizer    func(payload UserPayload, route string) error
+	authenticator func(http.Header) (UserPayload, error)
+	authorizer    func(UserPayload, string) error
 }
 
 func (o *options) ensure() {
@@ -88,13 +88,13 @@ func WithBaseURL(url string) Option {
 	})
 }
 
-func WithAuthenticator(f func(header http.Header) (UserPayload, error)) Option {
+func WithAuthenticator(f func(http.Header) (UserPayload, error)) Option {
 	return optionFunc(func(opts *options) {
 		opts.authenticator = f
 	})
 }
 
-func WithAuthorizer(f func(payload UserPayload, route string) error) Option {
+func WithAuthorizer(f func(UserPayload, string) error) Option {
 	return optionFunc(func(opts *options) {
 		opts.authorizer = f
 	})
