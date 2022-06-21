@@ -2,16 +2,18 @@ package app
 
 import "fmt"
 
-func NewError(status, message string) error {
+func NewError(status, message string, details ...any) error {
 	return internalError{
 		Status:  status,
 		Message: message,
+		Details: details,
 	}
 }
 
 type internalError struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
+	Details []any  `json:"details"`
 }
 
 func (i internalError) Error() string {
