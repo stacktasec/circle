@@ -10,7 +10,9 @@
 
 According to [Clean Coder Blog](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) ，
 
-We should 
+We can follow the following principles to write a clean layered, maintainable, and testable Go server application
+
+Rule of Clean Architecture by Uncle Bob
 
 - Independent of Frameworks. The architecture does not depend on the existence of some library of feature laden software. This allows you to use such frameworks as tools, rather than having to cram your system into their limited constraints.
 - Testable. The business rules can be tested without the UI, Database, Web Server, or any other external element.
@@ -20,7 +22,13 @@ We should
 
 
 
-So the `Circle`that is such a framework that helps you convert the core business logic described by using the standard library into the agreed Http API
+**As long as your infrastructure layer uses interfaces for abstraction and exports constructors with interfaces as return values, and your business service functions are written in the following format**
+
+```
+func(context.Context,Request)(*Resp,error)
+```
+
+**So the `Circle`that is such a kit that help you convert some of these functions into HTTP APIs with agreed-upon behavior**
 
 
 
