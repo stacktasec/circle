@@ -53,7 +53,7 @@ func makeReflect(pointerValue reflect.Value) []reflectAction {
 		inParams := methodType.NumIn()
 		outParams := methodType.NumOut()
 		if inParams != 3 || outParams != 2 {
-			panic("exported method must be action")
+			continue
 		}
 
 		in1 := methodType.In(1)

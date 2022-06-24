@@ -13,7 +13,7 @@ func NewError(status, message string, details ...any) error {
 type internalError struct {
 	Status  string `json:"status"`
 	Message string `json:"message"`
-	Details []any  `json:"details"`
+	Details []any  `json:"details,omitempty"`
 }
 
 func (i internalError) Error() string {
