@@ -25,7 +25,7 @@ Rule of Clean Architecture by Uncle Bob
 **As long as your infrastructure layer uses interfaces for abstraction and exports constructors with interfaces as return values, and your business service functions are written in the following format**
 
 ```
-func(context.Context,Request)(*Resp,error)
+func(context.Context, Request) (*Resp, error)
 ```
 
 **So the `Circle`that is such a kit that help you convert some of these functions into HTTP APIs with agreed-upon behavior**
