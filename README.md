@@ -1,10 +1,48 @@
 # Circle
 
+ [Chinese](https://github.com/stacktasec/circle/blob/main/README-zh.md).
+
+
+
 ### An RPC-style dependency injection-based Http Server development kit
+
+
+
+According to [Clean Coder Blog](https://blog.cleancoder.com/uncle-bob/2012/08/13/the-clean-architecture.html) ，
+
+We should 
+
+- Independent of Frameworks. The architecture does not depend on the existence of some library of feature laden software. This allows you to use such frameworks as tools, rather than having to cram your system into their limited constraints.
+- Testable. The business rules can be tested without the UI, Database, Web Server, or any other external element.
+- Independent of UI. The UI can change easily, without changing the rest of the system. A Web UI could be replaced with a console UI, for example, without changing the business rules.
+- Independent of Database. You can swap out Oracle or SQL Server, for Mongo, BigTable, CouchDB, or something else. Your business rules are not bound to the database.
+- Independent of any external agency. In fact your business rules simply don’t know anything at all about the outside world.
+
+
+
+So the `Circle`that is such a framework that helps you convert the core business logic described by using the standard library into the agreed Http API
+
+
 
 **Warning: The current version has not been rigorously tested. The purpose of open source is only to verify ideas and learn. It is strictly forbidden to use in production environment, otherwise the consequences will be at your own risk.**
 
-Mainly packaged based on the following open source libraries
+
+
+### Prerequisites
+
+Go 1.18 installed
+
+
+
+### Installing
+
+```
+go get github.com/stacktasec/circle
+```
+
+
+
+### Mainly packaged based on the following open source libraries
 
 `github.com/gin-gonic/gin`
 
@@ -12,7 +50,9 @@ Mainly packaged based on the following open source libraries
 
 `go.uber.org/zap`
 
-Features:
+
+
+### Features:
 
 - Global dependency injection
 - Automatically map business logic code to Http interface by convention
@@ -25,12 +65,16 @@ Features:
 - Automatic health check endpoints
 - Automatic matching of business errors, internal errors, not found errors
 - Easy to use zap log wrapper
+  
+  
 
-TODO:
+### TODO:
 
 - Automatically generate OpenAPI documentation
 
-Get Started
+
+
+### Get Started
 
 ```go
 package main
@@ -105,6 +149,23 @@ func main() {
     a.Run()
 }
 ```
+
+
+
+then you can
+
+```
+curl --location --request POST 'http://localhost:8080/api/v1/demo/sum' \
+--header 'Content-Type: application/json' \
+--data-raw '{
+    "x":1000,
+    "y":500
+}'
+```
+
+
+
+
 
 Http status code comparison
 
